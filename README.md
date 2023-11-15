@@ -1,4 +1,6 @@
-# Official page for "Exploiting spatial attention mechanism for improved depth completion and feature fusion in novel view synthesis"
+# Exploiting spatial attention mechanism for improved depth completion and feature fusion in novel view synthesis
+
+This is the official page for "Exploiting spatial attention mechanism for improved depth completion and feature fusion in novel view synthesis".
 
 ## Executable file:
 
