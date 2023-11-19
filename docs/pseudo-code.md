@@ -13,7 +13,7 @@ def forward(
     depth_loss = 0
     
     # Apply depth completion and compute depth loss
-    completed_depth, estimated_depth, visual_features, spatial_features = self.depth_completion(
+    completed_depth, estimated_depth, visual_features = self.depth_completion(
         augmented_depth, input_imgs
     )
     depth_complete_loss, depth_estimate_loss = self.compute_depth_loss(
@@ -21,14 +21,14 @@ def forward(
     )
 
     # Perform rendering
-    prj_visual_features, prj_spatial_features = self.rendering(
+    prj_visual_features, prj_depth = self.rendering(
         K, src_RTs, dst_RTs,
-        visual_features, spatial_features, completed
+        visual_features, completed_depth, completed
     )
 
     # Compute enhanced images and loss
     synthesized_image = self.apply_fusion_network(
-        prj_visual_features, prj_spatial_features
+        prj_visual_features, prj_depth
     )
     visual_loss = self.compute_visual_loss(synthesized_image, output_imgs)
 
@@ -63,7 +63,7 @@ def forward(self, color, depth):
     spatial_features = self.combine_spatial_features(spatial_features, completed)
     visual_features = self.combine_visual_features(visual_features, color)
 
-    return completed, estimated, visual_feats, spatial_features
+    return completed, estimated, visual_feats
 ```
 
 ## Pseudo-code for the `rendering` method (Python-style)
@@ -71,39 +71,39 @@ def forward(self, color, depth):
 ```python
 def rendering(
     self, K, src_RTs, dst_RTs,
-    visual_features, spatial_features, completed
+    visual_features, completed
     ):
     num_inputs = self.input_view_num
     num_outputs = dst_RTs.shape[1]
 
     prj_visual_features = []
-    prj_spatial_features = []
+    prj_depth_maps = []
 
     for i in range(num_inputs):
         pts_3D_nv = self.pts_transformer.view_to_world_coord(
             completed[:, i], K, src_RTs[:, i])
 
         src_visual_feats = visual_features[:, i:i + 1]
-        src_spatial_feats = visual_features[:, i:i + 1]
+        src_depth = completed[:, i:i + 1]
 
         pointcloud = self.pts_transformer.world_to_view(
                 pts_3D_nv, K, dst_RTs,
         )
 
-        prj_visual_feats, prj_spatial_feats = self.pts_transformer.splatter(
-            pointcloud, src_visual_feats, src_spatial_feats, depth=True)
+        prj_visual_feats, prj_depth = self.pts_transformer.splatter(
+            pointcloud, src_visual_feats, src_depth, depth=True)
 
         prj_visual_features.append(prj_visual_feats)
-        prj_spatial_features.append(prj_spatial_feats)
+        prj_depth_maps.append(prj_depth)
 
-        return torch.stack(prj_visual_feats, 0), torch.stack(prj_spatial_feats, 0)
+        return torch.stack(prj_visual_feats, 0), torch.stack(prj_depth_maps, 0)
 ```
 
 ## Pseudo-code for the `fusion` method (Python-style)
 
 ```python
 def apply_fusion_network(
-        prj_visual_features, prj_spatial_features
+        prj_visual_features, prj_depth_maps
     ):
     c_hs = None
     d_hs = None
@@ -111,7 +111,7 @@ def apply_fusion_network(
     alphas = []
     for vidx in range(n_views):
         y, c_hs, d_hs = self.merge_net(
-            prj_visual_features[:, vidx], prj_spatial_features[:, vidx],
+            prj_visual_features[:, vidx], prj_depth_maps[:, vidx],
             c_hs, d_hs
         )
         self.estimate_view_color(y, out_colors, alphas)
