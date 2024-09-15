@@ -1,76 +1,73 @@
-import time
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 
+from models.layers.fuse import Fusion
+from models.networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from models.synthesis.base import BaseModule
+from tma_model_zoo.universal.swin import SwinTransformerV2
 
 
 class SwinColorFeats(nn.Module):
-    def forward(self, colors, cfeats):
-        norm_colors = self.normalize(colors * 0.5 + 0.5, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-        shallows = self.encs[0](norm_colors)
-        x4 = self.encs[1](shallows)
-
-        u0 = cfeats[-1] + self.c0(cfeats[-1])
-
-        u10 = functional.interpolate(u0, size=cfeats[-2].shape[-2:], mode='bilinear', align_corners=False)
-        u11 = torch.cat([cfeats[-2], u10], dim=1)
-        u12 = self.c11(u11)
-        u13 = self.c12(u12)
-
-        u20 = functional.interpolate(u13, size=cfeats[-3].shape[-2:], mode='bilinear', align_corners=False)
-        u21 = torch.cat([cfeats[-3], u20], dim=1)
-        u22 = self.c21(u21)
-        u23 = self.c22(u22)
-
-        u30 = functional.interpolate(u23, size=cfeats[-4].shape[-2:], mode='bilinear', align_corners=False)
-        u31 = torch.cat([cfeats[-4], u30], dim=1)
-        u32 = self.c31(u31)
-        u33 = self.c32(u32)
-
-        u40 = functional.interpolate(u33, size=x4.shape[-2:], mode='bilinear', align_corners=False)
-        u41 = torch.cat([x4, u40], dim=1)
-        u42 = self.c41(u41)
-        u43 = self.c42(u42)
-
-        u50 = functional.interpolate(u43, size=shallows.shape[-2:], mode='bilinear', align_corners=False)
-        u51 = torch.cat([shallows, u50], dim=1)
-        u52 = self.c51(u51)
-        return self.c52(u52)
-
-    @staticmethod
-    def normalize(tensor, mean, std, inplace=False):
-        if not torch.is_tensor(tensor):
-            raise TypeError(f'tensor should be a torch tensor. Got {type(tensor)}.')
-
-        if not inplace:
-            tensor = tensor.clone()
-
-        dtype = tensor.dtype
-        mean = torch.as_tensor(mean, dtype=dtype, device=tensor.device)
-        std = torch.as_tensor(std, dtype=dtype, device=tensor.device)
-
-        if (std == 0).any():
-            raise ValueError(f'std evaluated to zero after conversion to {dtype}, leading to division by zero.')
-
-        if mean.ndim == 1 and tensor.ndim == 3:
-            mean = mean[:, None, None]
-        if mean.ndim == 1 and tensor.ndim == 4:
-            mean = mean[None, :, None, None]
+    def __init__(self):
+        super().__init__()
         
-        if std.ndim == 1 and tensor.ndim == 3:
-            std = std[:, None, None]
-        if std.ndim == 1 and tensor.ndim == 4:
-            std = std[None, :, None, None]
-        
-        tensor.sub_(mean).div_(std)
-        return tensor
+        self.backbone = SwinTransformerV2(window_size=8)
+        self.backbone.load_pretrained()
+        self.backbone.eval()
 
+        self.pre_conv = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(768, 64, 3, 1, 1),
+                    nn.GELU(),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(384, 32, 3, 1, 1),
+                    nn.GELU(),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(192, 64, 3, 1, 1),
+                    nn.GELU(),
+                ),
+                None
+            ]
+        )
+
+    def forward(self, colors):
+        B, V, C, H, W = colors.shape
+        with torch.no_grad():
+            feats = self.backbone(colors.view(-1, C, H, W))
+
+        hf, wf = feats[0].shape[-2:]
+        merge = []
+        for i, f in enumerate(feats[::-1]):
+            if self.pre_conv[i] is not None:
+                f = self.pre_conv[i](f)
+                f = functional.interpolate(f, size=(hf, wf), mode='nearest')
+            merge.append(f)
+        
+        return torch.cat(merge, dim=1).view(B, V, -1, hf, wf)
 
 class LightFormer(BaseModule):
+    def freeze(self):
+        self.freeze_shallow_color_encoder()
+
+    def init_color_encoder(self):
+        self.encoder = SwinColorFeats()
+
+        self.encoder.eval()
+        for param in self.encoder.parameters():
+            param.requires_grad = False
+        for module in self.encoder.modules():
+            if isinstance(module, (SynchronizedBatchNorm2d, nn.BatchNorm2d, nn.LayerNorm)):
+                module.eval()
+
+        self.merge_net = Fusion()
+        self.up1 = nn.Conv2d(256, 128, 3, 1, 1)
+        self.up2 = nn.Conv2d(128, 64, 3, 1, 1)
+        self.out = nn.Conv2d(64, 3, 3, 1, 1)
+
     def view_render(self, src_feats, src_colors, pred_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs):
         """
         We construct point cloud for each input and render them to target views individually.
@@ -118,6 +115,71 @@ class LightFormer(BaseModule):
 
         return torch.stack(results, 0), torch.stack(warped, 0), torch.stack(projected_depths, 0)
 
+    def forward(self, batch):
+        depth_loss = 0
+
+        _, src_colors, dst_colors, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs = self.data_process(batch)
+        src_depths, dst_depths, augmented_mask = self.get_raw_depth(batch, src_colors.shape[-2], src_colors.shape[-1]) # list of depths  with the shape BxHxW.
+        
+        B, N, C, H, W = src_colors.shape
+        src_colors = src_colors.view(-1, C, H, W) # BS * num_input, C, H, W
+
+        if src_depths is not None:
+            src_depths = src_depths.view(-1, 1, H, W)
+                
+        if augmented_mask is not None:
+            augmented_mask = augmented_mask.view(-1, 1, H, W)
+
+        if self.opt.train_depth_only:
+            src_coms, src_ests, c_feats = self.com_depth_light(src_depths * augmented_mask, src_colors)
+            depth_loss = self.add_depth_loss(
+                src_depths, dst_depths, src_colors,  dst_colors,
+                K, src_RTs, dst_RTs, src_coms, src_ests)
+
+            loss = {"Total Loss": depth_loss, "depth_loss": depth_loss}
+
+            return (loss, {
+                    "InputImg": src_colors,
+                    "OutputImg": dst_colors.view(-1, *dst_colors.shape[2:]),
+                    "PredImg": dst_colors.view(-1, *dst_colors.shape[2:]),
+                    "ProjectedImg": dst_colors.view(-1, *dst_colors.shape[2:])
+                },
+            )
+        elif self.opt.train_depth:
+            src_coms, src_ests, c_feats = self.com_depth_light(src_depths * augmented_mask, src_colors)
+            depth_loss = self.add_depth_loss(
+                src_depths, dst_depths, src_colors,  dst_colors,
+                K, src_RTs, dst_RTs, src_coms, src_ests)
+        else:
+            with torch.no_grad():
+                src_coms, src_ests, c_feats = self.com_depth_light(src_depths * augmented_mask, src_colors)
+
+        fs = self.encoder(src_colors, c_feats)
+        fs = fs.view(B, N, -1, H, W)
+
+        # gen_fs, warped, projected_depths = self.rendering(K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, fs, input_imgs, gt_depth)
+        gen_fs, warped, projected_depths = self.rendering(K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, fs, src_colors, src_coms)
+        dst_colors, gen_fs, warped = self.augment_with_feats(dst_colors, gen_fs, warped)
+
+        projected_feats = torch.cat([gen_fs, warped], dim=2).permute(1, 0, 2, 3, 4)
+        projected_depths = projected_depths.permute(1, 0, 2, 3, 4)
+        refine_color = self.compute_enhanced_images(projected_feats, projected_depths, projected_feats.shape[1], dst_colors.shape[-2:])
+        loss = self.loss_function(refine_color, dst_colors.view(-1, *dst_colors.shape[2:]))
+
+        # # """
+        # loss["Total Loss"] += depth_loss
+        # loss["depth_loss"] = depth_loss
+        # # """
+
+        return (
+            loss, {
+                "InputImg": src_colors,
+                "OutputImg": dst_colors.view(-1, *dst_colors.shape[2:]),
+                "PredImg": refine_color.clamp(-1, 1),
+                "ProjectedImg": refine_color.clamp(-1, 1)
+            },
+        )
+
     def rendering(self, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, fs, colors, regressed_pts):
         bs, nv, c, _, _ = fs.shape
         fs = fs.contiguous().view(bs, nv, c, -1)
@@ -127,45 +189,25 @@ class LightFormer(BaseModule):
         gen_fs, warped, gen_depth = self.view_render(fs, colors, regressed_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs)
         return gen_fs, warped, gen_depth
     
-    def _eval_one_step(self, input_imgs, output_imgs, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, raw_depth):
-        start = time.time()
-        raw_depth, input_imgs, completed, estimated, fs = self.depth_regression(raw_depth, input_imgs)
+    def eval_one(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs):
+        fs = self.encoder(colors)
+        shape = colors.shape
+        colors, depths, prj_fs, warped, prj_depths = self.project(
+            colors, depths, fs, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
+        )
+        prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
+        prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
+        refined_fs = self.merge_net(
+            prj_fs, prj_depths, shape[-2:]
+        )
 
-        input_imgs, completed, gen_fs, warped, projected_depths = self.project(
-            input_imgs, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, completed, fs)
-        projected_masks = (projected_depths > 0).float()
+        out = self.up1(refined_fs)
+        out = functional.interpolate(out, scale_factor=2, mode='nearest')
+        out = self.up2(out)
+        out = functional.interpolate(out, size=shape, mode='nearest')
+        out = self.out(out)
 
-        projected_depths, refine_color = self.generate_novel_view(output_imgs, gen_fs, warped, projected_depths)
-        elapsed = time.time() - start
-
-        n_view, n_batch, _, height, width = gen_fs.shape
-        estimated = estimated.view(n_view, n_batch, 1, height, width).permute(1, 0, 2, 3, 4)
-        completed = completed.view(n_view, n_batch, 1, height, width).permute(1, 0, 2, 3, 4)
-        input_imgs = input_imgs.view(n_batch, n_view, 3, height, width)
-
-        torch.cuda.empty_cache()
-        output_dict = {
-            "InputImg": input_imgs,
-            "OutputImg": output_imgs.view(-1, *output_imgs.shape[2:]),
-            "PredImg": refine_color,
-            "ProjectedImg": refine_color,
-            'Completed': estimated,
-            'Estimated': estimated,
-            "Warped": warped.permute(1, 0, 2, 3, 4) * 2 - 1,
-            "ProjectedMasks": projected_masks.permute(1, 0, 2, 3, 4),
-            "ProjectedDepths": projected_depths,
-        }
-
-        if raw_depth is not None:
-            output_dict['InputDepth'] = raw_depth.view(n_view, n_batch, 1, height, width).permute(1, 0, 2, 3, 4)
-
-        return elapsed, output_dict
-
-    def eval_one_step(self, batch):
-        _, input_imgs, output_imgs, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs = self.data_process(batch)
-        raw_depth, _, _, _ = self.get_raw_depth(batch, height=input_imgs.shape[-2], width=input_imgs.shape[-1])
-
-        return self._eval_one_step(input_imgs, output_imgs, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, raw_depth)
+        return out, warped
 
     def generate_novel_view(self, output_imgs, gen_fs, warped, projected_depths):
         projected_feats = torch.cat([gen_fs, warped], dim=2).permute(1, 0, 2, 3, 4)
@@ -193,33 +235,43 @@ class LightFormer(BaseModule):
         out_colors = []
         alphas = []
         for vidx in range(n_views):
-            y, c_hs, d_hs = self.merge_net(projected_features[:, vidx], projected_depths[:, vidx], c_hs, d_hs)
+            # macs, _ = profile(self.merge_net, inputs=(projected_features[:, vidx], projected_depths[:, vidx], c_hs, d_hs))
+            # print('Fusion Module 0 FLOPs: ', macs * 3)
+            # exit()
+
+            y, c_hs, d_hs = self.merge_net(
+                projected_features[:, vidx], projected_depths[:, vidx], c_hs, d_hs)
             self.estimate_view_color(y, out_colors, alphas, out_size)
 
 
         return self.compute_out_color(out_colors, alphas)
 
-    def project(self, input_imgs, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, completed, fs):
-        bs, nv, c, _, _ = fs.shape
+    def project(self, colors, depths, feats, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs):
+        bs, nv, c, hf, wf = feats.shape
+        _, _, _, hc, wc = colors.shape
+
+        sh, sw = hf / hc, wf / wc
+        sK = K.clone()
+
+        sK[:, 0, :] = sw * sK[:, 0, :]
+        sK[:, 1, :] = sh * sK[:, 1, :]
+
+        colors = functional.interpolate(
+            colors.view(bs * nv, 3, hc, wc), size=(hf, wf),
+            mode='bilinear', align_corners=False, antialias=True
+        )
+        depths = functional.interpolate(
+            depths.view(bs * nv, 1, hc, wc), size=(hf, wf), mode='nearest'
+        )
+
+        feats = feats.contiguous().view(bs, nv, c, -1)
+        colors = colors.contiguous().view(bs, nv, 3, -1)
+        depths = depths.contiguous().view(bs, nv, 1, -1)
+
+        prj_fs, warped, prj_depths = self.view_render(
+            feats, colors, depths,
+            sK, torch.inverse(sK),
+            src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
+        )
         
-        fs = fs.contiguous().view(bs, nv, c, -1)
-        input_imgs = input_imgs.contiguous().view(bs, nv, 3, -1)
-        completed = completed.contiguous().view(bs, nv, 1, -1)
-
-        gen_fs, warped, projected_depths = self.view_render(fs, input_imgs, completed, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs)
-        
-        return input_imgs, completed, gen_fs, warped, projected_depths
-
-    def depth_regression(self, gt_depth, input_imgs):
-        B, N, C, H, W = input_imgs.shape
-        input_imgs = input_imgs.view(-1, C, H, W) # BS * num_input, C, H, W
-
-        if gt_depth is not None:
-            gt_depth = gt_depth.view(-1, 1, H, W)
-                
-        completed, estimated, c_feats = self.com_depth_light(gt_depth, input_imgs)
-
-        visual_feats = self.encoder(input_imgs, c_feats)
-        visual_feats = visual_feats.view(B, N, -1, H, W)
-
-        return gt_depth, input_imgs, completed, estimated, visual_feats
+        return colors, depths, prj_fs, warped, prj_depths

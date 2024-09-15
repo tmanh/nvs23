@@ -1,5 +1,4 @@
 import os
-import math
 import lpips
 import imageio
 import argparse 
@@ -80,51 +79,70 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    # opts = torch.load('/data/opts.pth')
-    # wmodel = torch.load('/data/pmodel.pth')
-    opts = torch.load('/data/opts.pth', map_location='cpu')
-    wmodel = torch.load('/data/pmodel.pth', map_location='cpu')
-    wmodel.eval()
+    sd = torch.load('checkpoint/model.pth', map_location='cpu')
+    
+    opts = sd['opts']
+    opts.inverse_depth = opts.inverse_depth_com
+    opts.DW = 384 // 4
+    opts.DH = 512 // 4
+    opts.num_views = 8
+    opts.input_view_num = 8
+    model = LightFormer(opts).to(device)
 
-    lpips_vgg = lpips.LPIPS(net="vgg").to(device=device)
+    adepths = torch.tensor(np.load('dataset/images/depths.npy'))
+    adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
 
-    opts.dataset = "dtu"
-    opts.dataset_path = args.dataset_path
-    opts.camera_path = os.path.join(args.dataset_path, 'camera.npy')
-    opts.depth_path = os.path.join(args.dataset_path, 'Depths_2')
+    acolors = torch.tensor(np.load('dataset/images/colors.npy'))
+    acolors = acolors.permute(0, 3, 1, 2).unsqueeze(0).float().cuda()
 
-    dataloader, output_path = load_dataset(args, opts)
-    src_list, base_exclude_views, evaluation = create_evaluation_dicts(args)
+    aK = torch.tensor(np.load('dataset/images/intrinsic.npy'))
+    aK = aK.unsqueeze(0).float().cuda()
 
-    n_samples = 0
-    total_duration = 0
+    aRTs = torch.tensor(np.load('dataset/images/pose.npy'))
+    aRTs = aRTs.unsqueeze(0).float().cuda()
 
-    for batch in dataloader:
-        scan_name = batch['path'][0].split("/")[-1]
-        with torch.no_grad():
-            results = wmodel.model.module.eval_batch(batch, num_view=args.input_view, chunk=4)
-            total_duration += results[0]
+    dst_RTs = torch.tensor(
+        np.array(
+            [
+                [0.9998969, 0.0142635, 0.0016333, 0.01],
+                [-0.0142360, 0.9997751, -0.0157192, 0.01],
+                [-0.0018571, 0.0156943, 0.9998751, 0],
+                [0, 0, 0, 1.0],
+            ]
+        )
+    ).float().cuda()
+    dst_RTs = dst_RTs.view(1, 1, 4, 4)
 
-        n_samples += results[1]['OutputImg'].shape[0]
+    aRTs_inv = torch.inverse(aRTs)
+    dst_RTinvs = torch.inverse(dst_RTs)
 
-        scan_path = write_input_images(output_path, scan_name, batch, results)
+    depths = adepths
+    colors = acolors * 2.0 - 1.0
+    K = aK[:, 0]
+    src_RTs = aRTs
+    src_RTinvs = aRTs_inv
 
-        ssim_dict, psnr_dict, ssim_exclude_dict, psnr_exclude_dict, gts, preds, gts_exclude, preds_exclude = compute_ssim_psnr(
-            base_exclude_views, batch, results, scan_path, src_list)
+    # model.load_state_dict(sd['state_dict'], strict=True)
+    model.eval()
+    with torch.no_grad():
+        out, warped = model.eval_one(
+            depths,
+            colors,
+            K,
+            src_RTinvs,
+            src_RTs,
+            dst_RTinvs,
+            dst_RTs, 
+        )
 
-        lpips_total, lpips_exclude = compute_lpips(args, device, lpips_vgg, gts, preds, gts_exclude, preds_exclude)
+    out = ((out + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+    out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    cv2.imwrite('out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-        evaluation[scan_name] = {}
-        evaluation[scan_name].update(
-            {"all_pred_psnr": np.mean(psnr_dict),
-             "all_pred_ssim":np.mean(ssim_dict),
-             "all_pred_lpips":lpips_total,
-             "exclu_pred_psnr":np.mean(psnr_exclude_dict),
-             "exclu_pred_ssim":np.mean(ssim_exclude_dict),
-             "excludee_pred_lpips":lpips_exclude,})
-
-    print(total_duration / n_samples)
-    save_results(output_path, evaluation)
+    warped = (warped * 255.0).clamp(0, 255.0)
+    for k in range(warped.shape[0]):
+        out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+        cv2.imwrite(f'out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
 
 def compute_mean_image(warped):
@@ -372,10 +390,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    print(dir_path)
-    print(args.dataset_path)
 
     main(args)
-
-
- 

@@ -515,7 +515,7 @@ class SwinTransformerV2(nn.Module):
         pretrained_window_sizes (tuple(int)): Pretrained window sizes of each layer.
     """
 
-    pretrain = '/data/pretrained/swinv2_tiny_patch4_window8_256.pth'
+    pretrain = 'weights/swinv2_tiny_patch4_window8_256.pth'
 
     def __init__(self, patch_size=4, in_chans=3, num_classes=1000,
                  embed_dim=96, depths=[2, 2, 6, 2], num_heads=[3, 6, 12, 24],
