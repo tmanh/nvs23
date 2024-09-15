@@ -1,4 +1,4 @@
-from tma_model_zoo.universal.swin import Mlp, window_partition, window_reverse
+from models.layers.swin import Mlp, window_partition, window_reverse
 from .osa import *
 
 

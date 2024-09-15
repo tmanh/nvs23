@@ -14,7 +14,6 @@ from models.losses.synthesis import SynthesisLoss
 from models.losses.sigloss import SigLoss
 from models.losses.multi_view import *
 
-from models.networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from models.projection.z_buffer_manipulator import Screen_PtsManipulator
 
 

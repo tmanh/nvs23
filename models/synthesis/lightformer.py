@@ -5,7 +5,7 @@ import torch.nn.functional as functional
 from models.layers.fuse import Fusion
 from models.networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from models.synthesis.base import BaseModule
-from tma_model_zoo.universal.swin import SwinTransformerV2
+from models.layers.swin import SwinTransformerV2
 
 
 class SwinColorFeats(nn.Module):
@@ -204,7 +204,7 @@ class LightFormer(BaseModule):
         out = self.up1(refined_fs)
         out = functional.interpolate(out, scale_factor=2, mode='nearest')
         out = self.up2(out)
-        out = functional.interpolate(out, size=shape, mode='nearest')
+        out = functional.interpolate(out, size=shape[-2:], mode='nearest')
         out = self.out(out)
 
         return out, warped
