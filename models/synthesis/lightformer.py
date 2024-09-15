@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as functional
 
 from models.layers.fuse import Fusion
-from models.networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from models.synthesis.base import BaseModule
 from models.layers.swin import SwinTransformerV2
 
@@ -60,7 +59,7 @@ class LightFormer(BaseModule):
         for param in self.encoder.parameters():
             param.requires_grad = False
         for module in self.encoder.modules():
-            if isinstance(module, (SynchronizedBatchNorm2d, nn.BatchNorm2d, nn.LayerNorm)):
+            if isinstance(module, (nn.BatchNorm2d, nn.LayerNorm)):
                 module.eval()
 
         self.merge_net = Fusion()

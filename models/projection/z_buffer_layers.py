@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 from pytorch3d.structures import Pointclouds

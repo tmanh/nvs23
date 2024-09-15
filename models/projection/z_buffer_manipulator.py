@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from pytorch3d import __version__ as p3dv
 
-from models.layers.z_buffer_layers import RasterizePointsXYsBlending
+from models.projection.z_buffer_layers import RasterizePointsXYsBlending
 
 
 EPS = 1e-2

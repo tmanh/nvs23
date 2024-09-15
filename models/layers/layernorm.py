@@ -50,16 +50,3 @@ class LayerNorm2d(nn.Module):
 
     def forward(self, x):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
-
-class GRN(nn.Module):
-    """ GRN (Global Response Normalization) layer
-    """
-    def __init__(self, dim):
-        super().__init__()
-        self.gamma = nn.Parameter(torch.zeros(1, dim, 1, 1))
-        self.beta = nn.Parameter(torch.zeros(1, dim, 1, 1))
-
-    def forward(self, x):
-        Gx = torch.norm(x, p=2, dim=(2,3), keepdim=True)
-        Nx = Gx / (Gx.mean(dim=1, keepdim=True) + 1e-6)
-        return self.gamma * (x * Nx) + self.beta + x
