@@ -91,7 +91,6 @@ class ArgumentParser:
         training.add_argument("--consis_loss", action="store_true", default=False)
         training.add_argument("--depth_lr_scaling", type=float,default=1.0)
         
-        training.add_argument("--lr_annealing", action="store_true", default=False)
         training.add_argument("--anneal_start", type=int, default=10000)
         training.add_argument("--anneal_t", type=int, default=100)
         training.add_argument("--anneal_factor",type=float,default=0.8)

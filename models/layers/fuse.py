@@ -37,7 +37,7 @@ class Fusion(nn.Module):
         self.spatial5 = OSA_Block(in_dim + depth_dim, window_size=w1)
 
 
-    def forward(self, prj_feats, prj_depths, shape):
+    def forward(self, prj_feats, prj_depths):
         B, V, C, H, W = prj_feats.shape
 
         ########### TO FEATURE

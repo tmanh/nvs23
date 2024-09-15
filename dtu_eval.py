@@ -12,7 +12,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from models.synthesis.base_model import BaseModel
 
 from options.options import get_dataset
 
@@ -83,8 +82,8 @@ def main(args):
     
     opts = sd['opts']
     opts.inverse_depth = opts.inverse_depth_com
-    opts.DW = 384 // 4
-    opts.DH = 512 // 4
+    opts.W = 384 // 4
+    opts.H = 512 // 4
     opts.num_views = 8
     opts.input_view_num = 8
     model = LightFormer(opts).to(device)
@@ -125,7 +124,7 @@ def main(args):
     # model.load_state_dict(sd['state_dict'], strict=True)
     model.eval()
     with torch.no_grad():
-        out, warped = model.eval_one(
+        out, warped = model(
             depths,
             colors,
             K,

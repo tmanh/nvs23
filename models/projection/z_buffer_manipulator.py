@@ -9,15 +9,22 @@ from models.projection.z_buffer_layers import RasterizePointsXYsBlending
 EPS = 1e-2
 
 
-def get_pixel_grids(height, width):
+def get_pixel_grids(height, width, device):
     with torch.no_grad():
         # texture coordinate
-        x_linspace = torch.linspace(0, width - 1, width).view(1, width).expand(height, width)
-        y_linspace = torch.linspace(0, height - 1, height).view(height, 1).expand(height, width)
+        x_linspace = torch.linspace(0, width - 1, width, device=device).view(1, width).expand(height, width)
+        y_linspace = torch.linspace(0, height - 1, height, device=device).view(height, 1).expand(height, width)
         x_coordinates = x_linspace.contiguous().view(-1)
         y_coordinates = y_linspace.contiguous().view(-1)
-        ones = torch.ones(height * width)
-        indices_grid = torch.stack([x_coordinates,  y_coordinates, ones, torch.ones(height * width)], dim=0)
+        ones = torch.ones(height * width, device=device)
+        indices_grid = torch.stack(
+            [
+                x_coordinates,
+                y_coordinates,
+                ones,
+                torch.ones(height * width, device=device)
+            ], dim=0
+        )
     
     return indices_grid
 
@@ -33,22 +40,18 @@ class Screen_PtsManipulator(nn.Module):
             points_per_pixel=opt.pp_pixel,
             opts=opt,
         )
-
-        self.H = H 
+        self.H = H
         self.W = W
-        self.scale_factor = opt.scale_factor
 
-        xyzs = get_pixel_grids(height=H, width=W).view(1,  4, -1)
+    def view_to_world_coord(self, pts3D, K, K_inv, RT_cam1, RTinv_cam1, H, W):
+        xyzs = get_pixel_grids(height=H, width=W, device=pts3D.device).view(1,  4, -1)
 
-        self.register_buffer("xyzs", xyzs)
-
-    def view_to_world_coord(self, pts3D, K, K_inv, RT_cam1, RTinv_cam1):
         # PERFORM PROJECTION
         # Project the world points into the new view
         if len(pts3D.shape) > 3:
             pts3D = pts3D.contiguous().view(pts3D.shape[0], 1, -1)
 
-        projected_coors = self.xyzs * pts3D
+        projected_coors = xyzs * pts3D
         projected_coors[:, -1, :] = 1
 
         cam1_X = K_inv.bmm(projected_coors)
