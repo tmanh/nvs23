@@ -132,6 +132,7 @@ def main(args):
             src_RTs,
             dst_RTinvs,
             dst_RTs, 
+            visualize=True
         )
 
     out = ((out + 1.0) / 2.0 * 255.0).clamp(0, 255.0)

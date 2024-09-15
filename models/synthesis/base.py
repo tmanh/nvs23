@@ -74,11 +74,12 @@ class BaseModule(nn.Module):
     
     ##### FORWARD ###################################
 
-    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs):
+    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
         fs = self.encoder(colors)
 
         prj_fs, warped, prj_depths = self.project(
-            colors, depths, fs, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
+            colors, depths, fs, K,
+            src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
@@ -96,25 +97,23 @@ class BaseModule(nn.Module):
         return out, warped
 
     def view_render(
-            self, src_feats, src_colors, pred_pts,
+            self, src_feats, src_pts,
             K, K_inv,
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
             H, W
         ):
         num_inputs = self.opt.input_view_num
         num_outputs = dst_RTs.shape[1]
-        results = []
-        warped = []
-        projected_depths = []
+        prj_feats = []
+        prj_depths = []
         _, _, _, N = src_feats.shape
 
         for i in range(num_inputs):
             pts_3D_nv = self.pts_transformer.view_to_world_coord(
-                pred_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
+                src_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
             )
 
-            modified_src = src_feats[:, i:i + 1]
-            src_co = src_colors[:, i:i + 1]
+            src_fs = src_feats[:, i:i + 1]
 
             sampler = self.pts_transformer.world_to_view(
                 pts_3D_nv.unsqueeze(1).expand(-1, num_outputs, -1, -1).view(-1, 4, N),
@@ -124,20 +123,16 @@ class BaseModule(nn.Module):
                 dst_RTinvs.view(-1, 4, 4)
             )
             pointcloud = sampler.permute(0, 2, 1).contiguous()
-            modified_src = modified_src.view(-1, *modified_src.shape[2:])
-            src_co = src_co.view(modified_src.shape[0], 3, H * W)
+            src_fs = src_fs.view(-1, *src_fs.shape[2:])
 
-            modified_src = torch.cat([modified_src, src_co * 0.5 + 0.5], dim=1)
+            prj_fs, prj_ds = self.pts_transformer.splatter(pointcloud, src_fs, depth=True)
 
-            result, depth = self.pts_transformer.splatter(pointcloud, modified_src, depth=True)
+            prj_depths.append(prj_ds)
+            prj_feats.append(prj_fs)
 
-            projected_depths.append(depth)
-            results.append(result[:, :-3])
-            warped.append(result[:, -3:])
+        return torch.stack(prj_feats, 0), torch.stack(prj_depths, 0)
 
-        return torch.stack(results, 0), torch.stack(warped, 0), torch.stack(projected_depths, 0)
-
-    def project(self, colors, depths, feats, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs):
+    def project(self, colors, depths, feats, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
         bs, nv, c, hf, wf = feats.shape
         _, _, _, hc, wc = colors.shape
 
@@ -159,14 +154,24 @@ class BaseModule(nn.Module):
         colors = colors.contiguous().view(bs, nv, 3, -1)
         depths = depths.contiguous().view(bs, nv, 1, -1)
 
-        prj_fs, warped, prj_depths = self.view_render(
-            feats, colors, depths,
+        prj_feats, prj_depths = self.view_render(
+            feats, depths,
             sK, torch.inverse(sK),
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
             hf, wf
         )
+
+        if visualize:
+            prj_colors, prj_depths = self.view_render(
+                colors, depths,
+                sK, torch.inverse(sK),
+                src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
+                hf, wf
+            )
+        else:
+            prj_colors = None
         
-        return prj_fs, warped, prj_depths
+        return prj_feats, prj_colors, prj_depths
 
     ##### DATA AUGMENTATION ###################################
 
