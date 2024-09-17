@@ -14,10 +14,10 @@ from einops import rearrange
 from tqdm import tqdm
 import lpips
 
+from models.losses.cobi import ContextualBilateralLoss
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
-from losses.cobi import ContextualBilateralLoss
 from utils.common import instantiate_from_config
 
 
@@ -96,9 +96,9 @@ def main(args) -> None:
         print(f"Experiment directory created at {exp_dir}")
 
     # Create model:
-    swinir: SwinIR = instantiate_from_config(cfg.model.swinir)
+    renderer = LightFormer(cfg)
     if cfg.train.resume:
-        swinir.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
+        renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
             print(f"strictly load weight from checkpoint: {cfg.train.resume}")
     else:
@@ -107,7 +107,7 @@ def main(args) -> None:
     
     # Setup optimizer:
     opt = torch.optim.AdamW(
-        swinir.parameters(), lr=cfg.train.learning_rate,
+        renderer.parameters(), lr=cfg.train.learning_rate,
         weight_decay=0
     )
     
@@ -130,9 +130,9 @@ def main(args) -> None:
     cobi = ContextualBilateralLoss(device=device)
 
     # Prepare models for training:
-    swinir.train().to(device)
-    swinir, opt, loader, val_loader = accelerator.prepare(swinir, opt, loader, val_loader)
-    pure_swinir = accelerator.unwrap_model(swinir)
+    renderer.train().to(device)
+    renderer, opt, loader, val_loader = accelerator.prepare(renderer, opt, loader, val_loader)
+    pure_renderer = accelerator.unwrap_model(renderer)
 
     # Variables for monitoring/logging purposes:
     global_step = 0
@@ -153,7 +153,7 @@ def main(args) -> None:
         for gt, lq, _ in loader:
             gt = rearrange((gt + 1) / 2, "b h w c -> b c h w").contiguous().float().to(device)
             lq = rearrange(lq, "b h w c -> b c h w").contiguous().float().to(device)
-            pred = swinir(lq)
+            pred = renderer(lq)
             # sum => mean
             loss = F.mse_loss(input=pred, target=gt, reduction="mean") * 0.1 + cobi(pred, gt)
 
@@ -179,16 +179,16 @@ def main(args) -> None:
             # Save checkpoint:
             if global_step % cfg.train.ckpt_every == 0:
                 if accelerator.is_local_main_process:
-                    checkpoint = pure_swinir.state_dict()
+                    checkpoint = pure_renderer.state_dict()
                     ckpt_path = f"{ckpt_dir}/{global_step:07d}.pt"
                     torch.save(checkpoint, ckpt_path)
 
             if global_step % cfg.train.image_every == 0 or global_step == 1:
-                swinir.eval()
+                renderer.eval()
                 N = 12
                 log_gt, log_lq = gt[:N], lq[:N]
                 with torch.no_grad():
-                    log_pred = swinir(log_lq)
+                    log_pred = renderer(log_lq)
                 if accelerator.is_local_main_process:
                     for tag, image in [
                         ("image/pred", log_pred),
@@ -196,11 +196,11 @@ def main(args) -> None:
                         ("image/lq", log_lq),
                     ]:
                         writer.add_image(tag, make_grid(image, nrow=4), global_step)
-                swinir.train()
+                renderer.train()
 
             # Evaluate model:
             if global_step % cfg.train.val_every == 0:
-                swinir.eval()
+                renderer.eval()
                 val_loss = []
                 val_lpips = []
                 val_psnr = []
@@ -212,7 +212,7 @@ def main(args) -> None:
                     val_lq = rearrange(val_lq, "b h w c -> b c h w").contiguous().float().to(device)
                     with torch.no_grad():
                         # forward
-                        val_pred = swinir(val_lq)
+                        val_pred = renderer(val_lq)
                         # compute metrics (loss, lpips, psnr)
                         val_loss.append(F.mse_loss(input=val_pred, target=val_gt, reduction="sum").item())
                         val_lpips.append(lpips_model(val_pred, val_gt, normalize=True).mean().item())
@@ -229,7 +229,7 @@ def main(args) -> None:
                         ("val/psnr", avg_val_psnr)
                     ]:
                         writer.add_scalar(tag, val, global_step)
-                swinir.train()
+                renderer.train()
             
             accelerator.wait_for_everyone()
 

@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from copy import deepcopy
-
 from models.losses.synthesis import SynthesisLoss
 from models.losses.multi_view import *
 
@@ -22,7 +20,6 @@ class BaseModule(nn.Module):
 
         self.init_hyper_params(opt)
         self.init_models()
-        self.init_loss()
         self.freeze()
 
     @staticmethod
@@ -43,8 +40,8 @@ class BaseModule(nn.Module):
         self.opt = opt
 
         # Use H if specifid in opt or H = W
-        self.H = opt.H
-        self.W = opt.W
+        self.H = opt.model.H
+        self.W = opt.model.W
 
     def init_models(self):
         self.init_color_encoder()
@@ -56,16 +53,13 @@ class BaseModule(nn.Module):
         self.encoder.freeze()
     
     def init_renderer(self):
-        width = self.opt.W
-        height = self.opt.H
+        width = self.opt.model.W
+        height = self.opt.model.H
 
         self.pts_transformer = Screen_PtsManipulator(W=width, H=height, opt=self.opt)
 
     def init_fusion_module(self):
         pass
-
-    def init_loss(self):
-        self.loss_function = SynthesisLoss(opt=self.opt)
 
     def to_cuda(self, *args):
         if torch.cuda.is_available():
@@ -74,7 +68,7 @@ class BaseModule(nn.Module):
     
     ##### FORWARD ###################################
 
-    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+    def forward(self, render, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
         fs = self.encoder(colors)
 
         prj_fs, warped, prj_depths = self.project(
@@ -83,6 +77,11 @@ class BaseModule(nn.Module):
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
+
+        if render is not None:
+            B, _, C, H, W = colors.shape
+            render_fs = self.encoder(render.view(B, 1, C, H, W))
+            prj_fs = torch.cat([render_fs, prj_fs], dim=1)
         
         refined_fs = self.merge_net(
             prj_fs, prj_depths

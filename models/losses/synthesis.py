@@ -8,22 +8,8 @@ from models.networks.architectures import VGG19
 
 
 class SynthesisLoss(nn.Module):
-    def __init__(self, opt):
+    def __init__(self):
         super().__init__()
-        self.opt = opt
-
-        # Get the losses
-        print(opt.losses)
-        print(zip(*[l.split("_") for l in opt.losses]))
-        lambdas, loss_names = zip(*[l.split("_") for l in opt.losses])
-        lambdas = [float(l) for l in lambdas]
-
-        loss_names += ('PSNR', 'SSIM')
-
-        self.lambdas = lambdas
-        self.losses = nn.ModuleList(
-            [self.get_loss_from_name(loss_name) for loss_name in loss_names]
-        )
 
     def get_loss_from_name(self, name):
         if name == 'l1':
