@@ -90,7 +90,7 @@ class BaseModule(nn.Module):
 
         import cv2
         print(warped.shape)
-        warped = (warped * 255.0).clamp(0, 255.0)
+        warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
         for k in range(warped.shape[0]):
             out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
             cv2.imwrite(f'out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
