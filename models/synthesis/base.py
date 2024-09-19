@@ -138,7 +138,7 @@ class BaseModule(nn.Module):
 
         sK[:, 0, :] = sw * sK[:, 0, :]
         sK[:, 1, :] = sh * sK[:, 1, :]
-        print(sK)
+
         colors = F.interpolate(
             colors.view(bs * nv, 3, hc, wc), size=(hf, wf),
             mode='bilinear', align_corners=False, antialias=True

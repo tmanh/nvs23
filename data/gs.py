@@ -294,7 +294,7 @@ class DiffData3:
         Ks = torch.tensor(Ks)
         Rts = torch.tensor(Rts)
 
-        return colors[:1], colors[1:], depths[1:], Ks[0], Rts[:1], Rts[1:]
+        return colors[:1], colors[0:], depths[0:], Ks[0], Rts[:1], Rts[0:]
 
     def __getitem__(self, idx):
         dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
