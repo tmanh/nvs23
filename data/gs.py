@@ -231,7 +231,7 @@ class DiffData3:
         for scene in scenes:
             if 'apple' not in scene:
                 continue
-            views = [osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))]
+            views = sorted([osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))])
             sd = {
                 'depth': osp.join(scene, 'depths.npy'),
                 'intrinsic': osp.join(scene, 'intrinsic.npy'),
@@ -240,7 +240,6 @@ class DiffData3:
             }
             for view in views:
                 sd['color'].append(osp.join(view, 'gt_enhanced.png'))
-                sd['color'] = sorted(sd['color'])
             self.scenes.append(sd)
     
     def with_transform(self, preprocess_train):
