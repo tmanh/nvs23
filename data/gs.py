@@ -239,6 +239,7 @@ class DiffData3:
                 'color': []
             }
             for view in views:
+                print(view)
                 sd['color'].append(osp.join(view, 'gt_enhanced.png'))
             self.scenes.append(sd)
     
