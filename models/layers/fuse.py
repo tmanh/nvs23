@@ -56,6 +56,7 @@ class Fusion(nn.Module):
 
         x = f[:, 0]
         y = f[:, 1:]
+        print(x.shape, y.shape)
         x = self.cross1(x, y)
         x = self.spatial1(x)
 

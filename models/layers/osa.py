@@ -74,7 +74,6 @@ class Attention(nn.Module):     # NOTE: Spatial attention (MLP style)
         q = q * self.scale
 
         # sim
-        print(q.shape, k.shape)
         sim = einsum('b h i d, b h j d -> b h i j', q, k)
 
         # add positional bias
