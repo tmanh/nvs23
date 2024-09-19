@@ -136,10 +136,12 @@ def main(args):
             depths,
             colors,
             K,
-            src_RTinvs,
+            
             src_RTs,
-            dst_RTinvs,
+            src_RTinvs,
+            
             dst_RTs, 
+            dst_RTinvs,
             visualize=True
         )
 
