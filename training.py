@@ -161,7 +161,7 @@ def main(args) -> None:
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
             pred = renderer(
                 src_ds, src_cs,
-                torch.inverse(K),
+                K,
                 src_Rts, torch.inverse(src_Rts),
                 dst_Rts, torch.inverse(dst_Rts)
             )
