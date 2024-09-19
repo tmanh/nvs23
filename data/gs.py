@@ -229,7 +229,7 @@ class DiffData3:
         
         scenes = sorted([osp.join(self.path, d) for d in os.listdir(self.path)])
         for scene in scenes:
-            if 'apple' not in scene:
+            if 'apple_002' not in scene:
                 continue
             views = sorted([osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))])
             sd = {
