@@ -188,7 +188,6 @@ class Channel_Attention(nn.Module):  # NOTE: Channel Attention (Conv2D style)
         k = F.normalize(k, dim=-1)
 
         attn = (q @ k.transpose(-2, -1)) * self.temperature 
-        print(attn.shape)
         attn = attn.softmax(dim=-1)
         out =  (attn @ v)
 
