@@ -240,6 +240,7 @@ class DiffData3:
             }
             for view in views:
                 sd['color'].append(osp.join(view, 'gt_enhanced.png'))
+                sd['color'] = sorted(sd['color'])
             self.scenes.append(sd)
     
     def with_transform(self, preprocess_train):
