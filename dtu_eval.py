@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
+from omegaconf import OmegaConf
 from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
 import cv2
@@ -78,15 +79,8 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    sd = torch.load('checkpoint/model.pth', map_location='cpu')
-    
-    opts = sd['opts']
-    opts.inverse_depth = opts.inverse_depth_com
-    opts.W = 384 // 4
-    opts.H = 512 // 4
-    opts.num_views = 8
-    opts.input_view_num = 8
-    model = LightFormer(opts).to(device)
+    cfg = OmegaConf.load('configs/train.yaml')
+    model = LightFormer(cfg).to(device)
 
     adepths = torch.tensor(np.load('wildrgb/apple_002/depths.npy'))
     adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
