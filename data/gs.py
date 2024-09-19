@@ -222,7 +222,7 @@ class DiffData3:
         self.H = 512
         self.W = 384
 
-        self.n_samples = 3
+        self.n_samples = 8
 
     def scan(self):
         self.scenes = []
