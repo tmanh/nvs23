@@ -10,12 +10,12 @@ dataset:
   train:
     target: data.gs.DiffData3
     params:
-      file_list: 'wildrgb'
+      file_list: '/scratch/antruong/workspace/myspace/datasets/wildrgb'
       val: False
   val:
     target: data.gs.DiffData3
     params:
-      file_list: 'wildrgb'
+      file_list: '/scratch/antruong/workspace/myspace/datasets/wildrgb'
       val: True
 
 train:
