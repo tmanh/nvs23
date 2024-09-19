@@ -89,6 +89,7 @@ class BaseModule(nn.Module):
         out = self.out(out)
 
         import cv2
+        print(warped.shape)
         warped = (warped * 255.0).clamp(0, 255.0)
         for k in range(warped.shape[0]):
             out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
