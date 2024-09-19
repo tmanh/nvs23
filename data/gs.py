@@ -227,7 +227,7 @@ class DiffData3:
     def scan(self):
         self.scenes = []
         
-        scenes = [osp.join(self.path, d) for d in os.listdir(self.path)]
+        scenes = sorted([osp.join(self.path, d) for d in os.listdir(self.path)])
         for scene in scenes:
             views = [osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))]
             sd = {
