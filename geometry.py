@@ -57,7 +57,7 @@ def get_args_parser():
     parser.add_argument("--focal_avg", action="store_true")
     parser.add_argument("--llffhold", type=int, default=2)
     parser.add_argument("--n_views", type=int, default=8)
-    parser.add_argument("--img_base_path", type=str, default="/scratch/antruong/workspace/myspace/datasets/wildrgb")
+    parser.add_argument("--img_base_path", type=str, default="wildrgb")
 
     return parser
 
@@ -89,48 +89,51 @@ if __name__ == '__main__':
 
     model = AsymmetricCroCo3DStereo.from_pretrained(model_path).to(device)
 
-    data_paths = [osp.join(img_base_path, d) for d in os.listdir(img_base_path)]
-    for data in data_paths:
-        scenes = [osp.join(data, d) for d in os.listdir(data)]
-        for scene_path in scenes:
-            if osp.exists(os.path.join(scene_path, 'depths.npy')) or not osp.isdir(scene_path):
-                continue
+    scenes = [osp.join(img_base_path, d) for d in os.listdir(img_base_path)]
+    for scene_path in scenes:
+        print(scene_path)
+        if 'apple_002' not in scene_path:
+            continue
+        if not osp.isdir(scene_path):
+            continue
+        # if osp.exists(os.path.join(scene_path, 'depths.npy')) or not osp.isdir(scene_path):
+        #     continue
             
-            view_folders = sorted([osp.join(scene_path, d) for d in os.listdir(scene_path) if osp.isdir(osp.join(scene_path, d))])
-            views = sorted([osp.join(d, 'gt_enhanced.png') for d in view_folders])
-            images, (H, W) = load_images(views)
-            print(f"{scene_path}: ori_size", (H, W))
+        view_folders = sorted([osp.join(scene_path, d) for d in os.listdir(scene_path) if osp.isdir(osp.join(scene_path, d))])
+        views = sorted([osp.join(d, 'gt_enhanced.png') for d in view_folders])
+        images, (H, W) = load_images(views)
+        print(f"{scene_path}: ori_size", (H, W))
 
-            start_time = time.time()
-            pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
-            output = inference(pairs, model, args.device, batch_size=batch_size)
-            scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
-            loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
-            scene = scene.clean_pointcloud()
-            imgs = [cv2.resize(img, dsize=(W, H), interpolation=cv2.INTER_LANCZOS4) for img in scene.imgs]
-            imgs = np.array(imgs)
-            focals = scene.get_focals()
-            poses = to_numpy(scene.get_im_poses())
-            pts3d = to_numpy(scene.get_pts3d())
-            scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
-            confidence_masks = to_numpy(scene.get_masks())
-            intrinsics = to_numpy(scene.get_intrinsics())
-            depths = [
-                F.interpolate(
-                    d.unsqueeze(0).unsqueeze(0), size=(H, W), mode='nearest'
-                ).squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
-            depths = np.array(depths)
-            ##########################################################################################################################################################################################
-            end_time = time.time()
-            print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
+        start_time = time.time()
+        pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
+        output = inference(pairs, model, args.device, batch_size=batch_size)
+        scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
+        loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
+        scene = scene.clean_pointcloud()
+        imgs = [cv2.resize(img, dsize=(W, H), interpolation=cv2.INTER_LANCZOS4) for img in scene.imgs]
+        imgs = np.array(imgs)
+        focals = scene.get_focals()
+        poses = to_numpy(scene.get_im_poses())
+        pts3d = to_numpy(scene.get_pts3d())
+        scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
+        confidence_masks = to_numpy(scene.get_masks())
+        intrinsics = to_numpy(scene.get_intrinsics())
+        depths = [
+            F.interpolate(
+                d.unsqueeze(0).unsqueeze(0), size=(H, W), mode='nearest'
+            ).squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
+        depths = np.array(depths)
+        ##########################################################################################################################################################################################
+        end_time = time.time()
+        print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
 
-            new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
-            new_intrinsics[:, :3, :3] = intrinsics
-            new_intrinsics[:, 0, :] = (W / 384) * new_intrinsics[:, 0, :]
-            new_intrinsics[:, 1, :] = (H / 512) * new_intrinsics[:, 1, :]
+        new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
+        new_intrinsics[:, :3, :3] = intrinsics
+        new_intrinsics[:, 0, :] = (W / 384) * new_intrinsics[:, 0, :]
+        new_intrinsics[:, 1, :] = (H / 512) * new_intrinsics[:, 1, :]
 
-            # save
-            np.save(os.path.join(scene_path, 'pose.npy'), poses)
-            np.save(os.path.join(scene_path, 'intrinsic.npy'), new_intrinsics)
-            np.save(os.path.join(scene_path, 'depths.npy'), depths)
-            # np.save(os.path.join(scene_path, 'colors.npy'), imgs)
+        # save
+        np.save(os.path.join(scene_path, 'pose.npy'), poses)
+        np.save(os.path.join(scene_path, 'intrinsic.npy'), new_intrinsics)
+        np.save(os.path.join(scene_path, 'depths.npy'), depths)
+        np.save(os.path.join(scene_path, 'colors.npy'), imgs)
