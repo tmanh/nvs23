@@ -229,6 +229,8 @@ class DiffData3:
         
         scenes = sorted([osp.join(self.path, d) for d in os.listdir(self.path)])
         for scene in scenes:
+            if 'apple' not in scene:
+                continue
             views = [osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))]
             sd = {
                 'depth': osp.join(scene, 'depths.npy'),
