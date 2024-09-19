@@ -2,18 +2,20 @@ model:
   H: 512
   W: 384
   radius: 1.5
+  rad_pow: 2
   pp_pixel: 24
+  accumulation: "alphacomposite"
 
 dataset:
   train:
     target: data.gs.DiffData3
     params:
-      file_list: '/scratch/antruong/workspace/myspace/datasets/diff_dataset_train'
+      file_list: '/scratch/antruong/workspace/myspace/datasets/wildrgb'
       val: False
   val:
     target: data.gs.DiffData3
     params:
-      file_list: '/scratch/guachen/datasets/dust3r_pcd_rendered_images'
+      file_list: '/scratch/antruong/workspace/myspace/datasets/wildrgb'
       val: True
 
 train:
@@ -21,7 +23,7 @@ train:
   exp_dir: 'exp'
   learning_rate: 1e-4
   # total batch size
-  batch_size: 8
+  batch_size: 1
   num_workers: 1
   train_steps: 150000
   log_every: 50

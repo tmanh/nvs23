@@ -164,3 +164,4 @@ cython_debug/
 weights
 dataset
 checkpoint
+exp

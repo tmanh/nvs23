@@ -93,6 +93,9 @@ if __name__ == '__main__':
     for data in data_paths:
         scenes = [osp.join(data, d) for d in os.listdir(data)]
         for scene_path in scenes:
+            if osp.exists(os.path.join(scene_path, 'depths.npy')) or not osp.isdir(scene_path):
+                continue
+            
             view_folders = sorted([osp.join(scene_path, d) for d in os.listdir(scene_path) if osp.isdir(osp.join(scene_path, d))])
             views = sorted([osp.join(d, 'gt_enhanced.png') for d in view_folders])
             images, (H, W) = load_images(views)
@@ -130,4 +133,4 @@ if __name__ == '__main__':
             np.save(os.path.join(scene_path, 'pose.npy'), poses)
             np.save(os.path.join(scene_path, 'intrinsic.npy'), new_intrinsics)
             np.save(os.path.join(scene_path, 'depths.npy'), depths)
-            np.save(os.path.join(scene_path, 'colors.npy'), imgs)
+            # np.save(os.path.join(scene_path, 'colors.npy'), imgs)

@@ -87,26 +87,26 @@ class RasterizePointsXYsBlending(nn.Module):
             pts3D, image_size, radius, self.points_per_pixel
         )
 
-        dist = dist / pow(radius, self.opts.rad_pow)
+        dist = dist / pow(radius, self.opts.model.rad_pow)
 
         alphas = (
             (1 - dist.clamp(max=1, min=1e-3).pow(0.5))
             .permute(0, 3, 1, 2)
         )
 
-        if self.opts.accumulation == 'alphacomposite':
+        if self.opts.model.accumulation == 'alphacomposite':
             transformed_src_alphas = compositing.alpha_composite(
                 points_idx.permute(0, 3, 1, 2).long(),
                 alphas,
                 pts3D.features_packed().permute(1,0),
             )
-        elif self.opts.accumulation == 'wsum':
+        elif self.opts.model.accumulation == 'wsum':
             transformed_src_alphas = compositing.weighted_sum(
                 points_idx.permute(0, 3, 1, 2).long(),
                 alphas,
                 pts3D.features_packed().permute(1,0),
             )
-        elif self.opts.accumulation == 'wsumnorm':
+        elif self.opts.model.accumulation == 'wsumnorm':
             transformed_src_alphas = compositing.weighted_sum_norm(
                 points_idx.permute(0, 3, 1, 2).long(),
                 alphas,

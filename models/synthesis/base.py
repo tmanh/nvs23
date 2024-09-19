@@ -68,7 +68,7 @@ class BaseModule(nn.Module):
     
     ##### FORWARD ###################################
 
-    def forward(self, render, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
         fs = self.encoder(colors)
 
         prj_fs, warped, prj_depths = self.project(
@@ -77,11 +77,6 @@ class BaseModule(nn.Module):
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
-
-        if render is not None:
-            B, _, C, H, W = colors.shape
-            render_fs = self.encoder(render.view(B, 1, C, H, W))
-            prj_fs = torch.cat([render_fs, prj_fs], dim=1)
         
         refined_fs = self.merge_net(
             prj_fs, prj_depths
@@ -93,6 +88,12 @@ class BaseModule(nn.Module):
         out = F.interpolate(out, size=colors.shape[-2:], mode='nearest')
         out = self.out(out)
 
+        import cv2
+        warped = (warped * 255.0).clamp(0, 255.0)
+        for k in range(warped.shape[0]):
+            out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+            cv2.imwrite(f'out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+        exit()
         return out, warped
 
     def view_render(
@@ -101,23 +102,19 @@ class BaseModule(nn.Module):
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
             H, W
         ):
-        num_inputs = self.opt.input_view_num
-        num_outputs = dst_RTs.shape[1]
         prj_feats = []
         prj_depths = []
-        _, _, _, N = src_feats.shape
-
-        for i in range(num_inputs):
+        _, V, _, N = src_feats.shape
+        for i in range(V):
             pts_3D_nv = self.pts_transformer.view_to_world_coord(
                 src_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
             )
 
             src_fs = src_feats[:, i:i + 1]
-
             sampler = self.pts_transformer.world_to_view(
-                pts_3D_nv.unsqueeze(1).expand(-1, num_outputs, -1, -1).view(-1, 4, N),
-                K.unsqueeze(1).expand(-1, num_outputs, -1, -1).view(-1, 4, 4),
-                K_inv.unsqueeze(1).expand(-1, num_outputs, -1, -1).view(-1, 4, 4),
+                pts_3D_nv,
+                K,
+                K_inv,
                 dst_RTs.view(-1, 4, 4),
                 dst_RTinvs.view(-1, 4, 4)
             )

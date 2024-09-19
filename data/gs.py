@@ -1,4 +1,6 @@
-import math
+import torch
+import torch.nn.functional as F
+
 import os
 import random
 import cv2
@@ -217,20 +219,33 @@ class DiffData3:
         self.val = val
         self.scan()
 
-    def scan(self):
-        with open(self.metadata, 'rb') as f:
-            metadata = pickle.load(f)
+        self.H = 512
+        self.W = 384
 
-        kd = 'train' if self.val else 'eval'
-        self.scenes = metadata[kd]
-        self.scenes = [s for s in self.scenes if 'wild' in s]
+        self.n_samples = 3
+
+    def scan(self):
+        self.scenes = []
+        
+        scenes = [osp.join(self.path, d) for d in os.listdir(self.path)]
+        for scene in scenes:
+            views = [osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))]
+            sd = {
+                'depth': osp.join(scene, 'depths.npy'),
+                'intrinsic': osp.join(scene, 'intrinsic.npy'),
+                'pose': osp.join(scene, 'pose.npy'),
+                'color': []
+            }
+            for view in views:
+                sd['color'].append(osp.join(view, 'gt_enhanced.png'))
+            self.scenes.append(sd)
     
     def with_transform(self, preprocess_train):
         self.transform = preprocess_train
         return self
 
     def __len__(self):
-        return len(self.scenes) * 50 if not self.val else len(self.scenes)
+        return len(self.scenes) if not self.val else int(len(self.scenes) * 0.05)
 
     def to_wild_pose_path(self, path):
         directory, name = os.path.split(path)
@@ -248,47 +263,43 @@ class DiffData3:
         Rt = tmp['camera_pose']
 
         return K, Rt
+    
+    def read_data_with_idx(self, scene, idxs):
+        depths = np.load(scene['depth'])[idxs]
+        Ks = np.load(scene['intrinsic'])[idxs]
+        Rts = np.load(scene['pose'])[idxs]
+
+        colors = []
+        for i, c in enumerate(idxs):
+            img = cv2.imread(scene['color'][c])
+            sx, sy = self.W / img.shape[1], self.H / img.shape[0]
+            img = cv2.resize(img, dsize=(self.W, self.H), interpolation=cv2.INTER_LANCZOS4)
+            Ks[i][0] = sx * Ks[i][0]
+            Ks[i][1] = sy * Ks[i][1]
+            colors.append(img)
+
+        return np.array(colors), depths, Ks, Rts
 
     def read_data_train(self, idx):
         scene = self.scenes[idx]
-        views = [osp.join(scene, d) for d in os.listdir(scene)]
+        
+        idxs = list(np.arange(len(scene['color'])))
+        idxs = random.sample(idxs, k=self.n_samples)
+        colors, depths, Ks, Rts = self.read_data_with_idx(scene, idxs)
 
-        subviews = random.sample(views, k=3)
-        main = subviews[0]
-        ref1 = subviews[1]
-        ref2 = subviews[2]
+        colors = torch.tensor(colors).permute(0, 3, 1, 2)
+        depths = torch.tensor(depths).unsqueeze(1)
+        Ks = torch.tensor(Ks)
+        Rts = torch.tensor(Rts)
 
-        if 'wild' in main:
-            K, dst_rt = self.read_wild_pose(self.to_wild_pose_path(main))
-            _, src_rt1 = self.read_wild_pose(self.to_wild_pose_path(ref1))
-            _, src_rt2 = self.read_wild_pose(self.to_wild_pose_path(ref2))
-
-        depth = osp.join(main, 'depth.npy')
-        render = osp.join(main, 'render.png')
-        gt = osp.join(main, 'gt_enhanced.png')
-        ref1 = osp.join(ref1, 'gt_enhanced.png')
-        ref2 = osp.join(ref2, 'gt_enhanced.png')
-
-        render = cv2.imread(render)
-        ref1 = cv2.imread(ref1)
-        ref2 = cv2.imread(ref2)
-        gt = cv2.imread(gt)
-
-        return *random_hue_change(render, gt, ref1, ref2), K, dst_rt, src_rt1, src_rt2
+        return colors[:1], colors[1:], depths[1:], Ks[0], Rts[:1], Rts[1:]
 
     def __getitem__(self, idx):
-        prd, tgt, ref1, ref2,  = self.read_data_train(idx % len(self.scenes))
+        dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
 
-        # ref1 = cv2.resize(ref1, self.image_size)
-        # ref2 = cv2.resize(ref2, self.image_size)
+        src_ds = F.interpolate(src_ds, size=(self.H, self.W), mode='nearest')
         
-        prd = prd / 255.0 * 2.0 - 1.0
-        tgt = tgt / 255.0 * 2.0 - 1.0
-        ref1 = ref1 / 255.0 * 2.0 - 1.0
-        ref2 = ref2 / 255.0 * 2.0 - 1.0
-        
-        prompt = ""
+        dst_cs = dst_cs / 255.0 * 2.0 - 1.0
+        src_cs = src_cs / 255.0 * 2.0 - 1.0
 
-        # tgt, prd = random_crop_arr(tgt, prd, self.image_size)
-
-        return tgt, depth, prd, ref1, ref2, prompt
+        return dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts

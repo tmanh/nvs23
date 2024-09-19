@@ -150,12 +150,23 @@ def main(args) -> None:
     
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
-        for gt, lq, _ in loader:
-            gt = rearrange((gt + 1) / 2, "b h w c -> b c h w").contiguous().float().to(device)
-            lq = rearrange(lq, "b h w c -> b c h w").contiguous().float().to(device)
-            pred = renderer(lq)
-            # sum => mean
-            loss = F.mse_loss(input=pred, target=gt, reduction="mean") * 0.1 + cobi(pred, gt)
+        for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in loader:
+            dst_cs = dst_cs.float().to(device)
+            src_cs = src_cs.float().to(device)
+            src_ds = src_ds.float().to(device)
+            K = K.float().to(device)
+            dst_Rts = dst_Rts.float().to(device)
+            src_Rts = src_Rts.float().to(device)
+
+            # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
+            pred = renderer(
+                src_ds, src_cs,
+                K,
+                src_Rts, torch.inverse(src_Rts),
+                dst_Rts, torch.inverse(dst_Rts)
+            )
+
+            loss = F.mse_loss(input=pred, target=dst_cs, reduction="mean") * 0.1 + cobi(pred, dst_cs)
 
             opt.zero_grad()
             accelerator.backward(loss)
@@ -183,21 +194,6 @@ def main(args) -> None:
                     ckpt_path = f"{ckpt_dir}/{global_step:07d}.pt"
                     torch.save(checkpoint, ckpt_path)
 
-            if global_step % cfg.train.image_every == 0 or global_step == 1:
-                renderer.eval()
-                N = 12
-                log_gt, log_lq = gt[:N], lq[:N]
-                with torch.no_grad():
-                    log_pred = renderer(log_lq)
-                if accelerator.is_local_main_process:
-                    for tag, image in [
-                        ("image/pred", log_pred),
-                        ("image/gt", log_gt),
-                        ("image/lq", log_lq),
-                    ]:
-                        writer.add_image(tag, make_grid(image, nrow=4), global_step)
-                renderer.train()
-
             # Evaluate model:
             if global_step % cfg.train.val_every == 0:
                 renderer.eval()
@@ -207,16 +203,27 @@ def main(args) -> None:
                 val_pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch",
                                 total=len(val_loader), leave=False, desc="Validation")
                 # TODO: use accelerator.gather_for_metrics for more precise metric calculation?
-                for val_gt, val_lq, _ in val_loader:
-                    val_gt = rearrange((val_gt + 1) / 2, "b h w c -> b c h w").contiguous().float().to(device)
-                    val_lq = rearrange(val_lq, "b h w c -> b c h w").contiguous().float().to(device)
+                for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in val_loader:
+                    dst_cs = dst_cs.float().to(device)
+                    src_cs = src_cs.float().to(device)
+                    src_ds = src_ds.float().to(device)
+                    K = K.float().to(device)
+                    dst_Rts = dst_Rts.float().to(device)
+                    src_Rts = src_Rts.float().to(device)
+
+                    # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
                     with torch.no_grad():
                         # forward
-                        val_pred = renderer(val_lq)
+                        val_pred = renderer(
+                            src_ds, src_cs,
+                            K,
+                            src_Rts, torch.inverse(src_Rts),
+                            dst_Rts, torch.inverse(dst_Rts)
+                        )
                         # compute metrics (loss, lpips, psnr)
-                        val_loss.append(F.mse_loss(input=val_pred, target=val_gt, reduction="sum").item())
-                        val_lpips.append(lpips_model(val_pred, val_gt, normalize=True).mean().item())
-                        val_psnr.append(calculate_psnr_pt(val_pred, val_gt, crop_border=0).mean().item())
+                        val_loss.append(F.mse_loss(input=val_pred, target=dst_cs, reduction="sum").item())
+                        val_lpips.append(lpips_model(val_pred, dst_cs, normalize=True).mean().item())
+                        val_psnr.append(calculate_psnr_pt(val_pred, dst_cs, crop_border=0).mean().item())
                     val_pbar.update(1)
                 val_pbar.close()
                 avg_val_loss = accelerator.gather(torch.tensor(val_loss, device=device).unsqueeze(0)).mean().item()
