@@ -73,7 +73,7 @@ class BaseModule(nn.Module):
 
         prj_fs, warped, prj_depths = self.project(
             colors, depths, fs, K,
-            src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, True
+            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs, True
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
