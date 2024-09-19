@@ -286,7 +286,7 @@ class DiffData3:
         scene = self.scenes[idx]
         
         idxs = list(np.arange(len(scene['color'])))
-        # idxs = random.sample(idxs, k=self.n_samples)
+        idxs = random.sample(idxs, k=self.n_samples)
         colors, depths, Ks, Rts = self.read_data_with_idx(scene, idxs)
 
         colors = torch.tensor(colors).permute(0, 3, 1, 2)

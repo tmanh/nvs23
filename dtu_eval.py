@@ -88,16 +88,30 @@ def main(args):
     opts.input_view_num = 8
     model = LightFormer(opts).to(device)
 
-    adepths = torch.tensor(np.load('dataset/images/depths.npy'))
+    adepths = torch.tensor(np.load('wildrgb/apple_002/depths.npy'))
     adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
 
-    acolors = torch.tensor(np.load('dataset/images/colors.npy'))
+    cps = [
+        'wildrgb/apple_002/00000/gt_enhanced.png',
+        'wildrgb/apple_002/00057/gt_enhanced.png',
+        'wildrgb/apple_002/00087/gt_enhanced.png',
+        'wildrgb/apple_002/00137/gt_enhanced.png', 
+        'wildrgb/apple_002/00170/gt_enhanced.png',
+        'wildrgb/apple_002/00207/gt_enhanced.png', 
+        'wildrgb/apple_002/00240/gt_enhanced.png',
+        'wildrgb/apple_002/00273/gt_enhanced.png'
+    ]
+    acolors = []
+    for c in cps:
+        acolors.append(cv2.imread(c))
+    acolors = np.array(acolors) / 255.0
+    acolors = torch.tensor(acolors)
     acolors = acolors.permute(0, 3, 1, 2).unsqueeze(0).float().cuda()
 
-    aK = torch.tensor(np.load('dataset/images/intrinsic.npy'))
+    aK = torch.tensor(np.load('wildrgb/apple_002/intrinsic.npy'))
     aK = aK.unsqueeze(0).float().cuda()
 
-    aRTs = torch.tensor(np.load('dataset/images/pose.npy'))
+    aRTs = torch.tensor(np.load('wildrgb/apple_002/pose.npy'))
     aRTs = aRTs.unsqueeze(0).float().cuda()
 
     dst_RTs = torch.tensor(
@@ -139,7 +153,7 @@ def main(args):
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-    warped = (warped * 255.0).clamp(0, 255.0)
+    warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
     for k in range(warped.shape[0]):
         out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
         cv2.imwrite(f'out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
