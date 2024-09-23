@@ -219,8 +219,8 @@ class DiffData3:
         self.val = val
         self.scan()
 
-        self.H = 512
-        self.W = 384
+        self.H = 384
+        self.W = 512
 
         self.n_samples = 8
 
@@ -231,15 +231,12 @@ class DiffData3:
         for scene in scenes:
             if 'apple_002' not in scene:
                 continue
-            views = sorted([osp.join(scene, d) for d in os.listdir(scene) if osp.isdir(osp.join(scene, d))])
             sd = {
                 'depth': osp.join(scene, 'depths.npy'),
                 'intrinsic': osp.join(scene, 'intrinsic.npy'),
                 'pose': osp.join(scene, 'pose.npy'),
-                'color': []
+                'color': osp.join(scene, 'colors.npy')
             }
-            for view in views:
-                sd['color'].append(osp.join(view, 'gt_enhanced.png'))
             self.scenes.append(sd)
     
     def with_transform(self, preprocess_train):
@@ -267,25 +264,17 @@ class DiffData3:
         return K, Rt
     
     def read_data_with_idx(self, scene, idxs):
+        colors = np.load(scene['color'])[idxs]
         depths = np.load(scene['depth'])[idxs]
         Ks = np.load(scene['intrinsic'])[idxs]
         Rts = np.load(scene['pose'])[idxs]
 
-        colors = []
-        for i, c in enumerate(idxs):
-            img = cv2.imread(scene['color'][c])
-            sx, sy = self.W / img.shape[1], self.H / img.shape[0]
-            img = cv2.resize(img, dsize=(self.W, self.H), interpolation=cv2.INTER_LANCZOS4)
-            Ks[i][0] = sx * Ks[i][0]
-            Ks[i][1] = sy * Ks[i][1]
-            colors.append(img)
-
-        return np.array(colors), depths, Ks, Rts
+        return colors, depths, Ks, Rts
 
     def read_data_train(self, idx):
         scene = self.scenes[idx]
         
-        idxs = list(np.arange(len(scene['color'])))
+        idxs = list(np.arange(8))
         idxs = random.sample(idxs, k=self.n_samples)
         colors, depths, Ks, Rts = self.read_data_with_idx(scene, idxs)
 
@@ -300,7 +289,9 @@ class DiffData3:
         dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
 
         src_ds = F.interpolate(src_ds, size=(self.H, self.W), mode='nearest')
-        
+        src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='nearest')
+        dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='nearest')
+
         dst_cs = dst_cs / 255.0 * 2.0 - 1.0
         src_cs = src_cs / 255.0 * 2.0 - 1.0
 

@@ -88,13 +88,13 @@ class BaseModule(nn.Module):
         out = F.interpolate(out, size=colors.shape[-2:], mode='nearest')
         out = self.out(out)
 
-        import cv2
-        print(warped.shape)
-        warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
-        for k in range(warped.shape[0]):
-            out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-            cv2.imwrite(f'out_{k}.png', out)
-        exit()
+        # import cv2
+        # print(warped.shape)
+        # warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+        # for k in range(warped.shape[0]):
+        #     out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+        #     cv2.imwrite(f'out_{k}.png', out)
+        # exit()
         return out, warped
 
     def view_render(
@@ -135,7 +135,7 @@ class BaseModule(nn.Module):
 
         sh, sw = hf / hc, wf / wc
         sK = K.clone()
-
+        print(colors.shape, depths.shape)
         sK[:, 0, :] = sw * sK[:, 0, :]
         sK[:, 1, :] = sh * sK[:, 1, :]
 

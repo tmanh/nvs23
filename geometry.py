@@ -34,7 +34,6 @@ def load_images(images, shape=(384, 512)):
         if not path.endswith(('.jpg', '.jpeg', '.png', '.JPG')):
             continue
         img = PIL.Image.open(path).convert('RGB')
-        W1, H1 = img.size
         img = img.resize(shape, PIL.Image.Resampling.LANCZOS)
 
         ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -42,7 +41,7 @@ def load_images(images, shape=(384, 512)):
             [img.size[::-1]]), idx=len(imgs), instance=str(len(imgs))))
 
     print(f' (Found {len(imgs)} images)')
-    return imgs, (W1, H1)
+    return imgs
 
 
 def get_args_parser():
@@ -91,18 +90,16 @@ if __name__ == '__main__':
 
     scenes = [osp.join(img_base_path, d) for d in os.listdir(img_base_path)]
     for scene_path in scenes:
-        print(scene_path)
-        if 'apple_002' not in scene_path:
-            continue
         if not osp.isdir(scene_path):
             continue
-        # if osp.exists(os.path.join(scene_path, 'depths.npy')) or not osp.isdir(scene_path):
-        #     continue
+        if osp.exists(os.path.join(scene_path, 'colors.npy')):
+            continue
+        print(scene_path)
             
         view_folders = sorted([osp.join(scene_path, d) for d in os.listdir(scene_path) if osp.isdir(osp.join(scene_path, d))])
         views = sorted([osp.join(d, 'gt_enhanced.png') for d in view_folders])
-        images, (H, W) = load_images(views)
-        print(f"{scene_path}: ori_size", (H, W))
+        images = load_images(views)
+        print(f"{scene_path}")
 
         start_time = time.time()
         pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
@@ -110,8 +107,7 @@ if __name__ == '__main__':
         scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
         loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
         scene = scene.clean_pointcloud()
-        imgs = [cv2.resize(img, dsize=(W, H), interpolation=cv2.INTER_LANCZOS4) for img in scene.imgs]
-        imgs = np.array(imgs)
+        imgs = np.array(scene.imgs)
         focals = scene.get_focals()
         poses = to_numpy(scene.get_im_poses())
         pts3d = to_numpy(scene.get_pts3d())
@@ -119,9 +115,7 @@ if __name__ == '__main__':
         confidence_masks = to_numpy(scene.get_masks())
         intrinsics = to_numpy(scene.get_intrinsics())
         depths = [
-            F.interpolate(
-                d.unsqueeze(0).unsqueeze(0), size=(H, W), mode='nearest'
-            ).squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
+            d.squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
         depths = np.array(depths)
         ##########################################################################################################################################################################################
         end_time = time.time()
@@ -129,8 +123,6 @@ if __name__ == '__main__':
 
         new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
         new_intrinsics[:, :3, :3] = intrinsics
-        new_intrinsics[:, 0, :] = (W / 384) * new_intrinsics[:, 0, :]
-        new_intrinsics[:, 1, :] = (H / 512) * new_intrinsics[:, 1, :]
 
         # save
         np.save(os.path.join(scene_path, 'pose.npy'), poses)

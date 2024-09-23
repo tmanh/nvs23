@@ -94,16 +94,7 @@ def main(args):
     aRTs = torch.tensor(np.load('wildrgb/apple_002/pose.npy'))
     aRTs = aRTs.unsqueeze(0).float().cuda()
 
-    dst_RTs = torch.tensor(
-        np.array(
-            [
-                [0.9998969, 0.0142635, 0.0016333, 0.01],
-                [-0.0142360, 0.9997751, -0.0157192, 0.01],
-                [-0.0018571, 0.0156943, 0.9998751, 0],
-                [0, 0, 0, 1.0],
-            ]
-        )
-    ).float().cuda()
+    dst_RTs = aRTs[:, 0, :, :]
     dst_RTs = dst_RTs.view(1, 1, 4, 4)
 
     aRTs_inv = torch.inverse(aRTs)
@@ -131,7 +122,7 @@ def main(args):
             visualize=True
         )
 
-    out = ((out + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+    out = ((acolors[:, 0] + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
