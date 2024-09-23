@@ -219,18 +219,18 @@ class DiffData3:
         self.val = val
         self.scan()
 
-        self.H = 384
-        self.W = 512
+        self.H = 512
+        self.W = 384
 
-        self.n_samples = 8
+        self.n_samples = 3
 
     def scan(self):
         self.scenes = []
         
         scenes = sorted([osp.join(self.path, d) for d in os.listdir(self.path)])
         for scene in scenes:
-            if 'apple_002' not in scene:
-                continue
+            # if 'apple_002' not in scene:
+            #     continue
             sd = {
                 'depth': osp.join(scene, 'depths.npy'),
                 'intrinsic': osp.join(scene, 'intrinsic.npy'),
@@ -280,10 +280,14 @@ class DiffData3:
 
         colors = torch.tensor(colors).permute(0, 3, 1, 2)
         depths = torch.tensor(depths).unsqueeze(1)
+
+        H, W = colors.shape[-2:]
         Ks = torch.tensor(Ks)
+        Ks[0, 0, :] = self.W / W * Ks[0, 0, :]
+        Ks[0, 1, :] = self.H / H * Ks[0, 1, :]
         Rts = torch.tensor(Rts)
 
-        return colors[:1], colors[0:], depths[0:], Ks[0], Rts[:1], Rts[0:]
+        return colors[:1], colors[1:], depths[1:], Ks[0], Rts[:1], Rts[1:]
 
     def __getitem__(self, idx):
         dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
@@ -292,7 +296,7 @@ class DiffData3:
         src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='nearest')
         dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='nearest')
 
-        dst_cs = dst_cs / 255.0 * 2.0 - 1.0
-        src_cs = src_cs / 255.0 * 2.0 - 1.0
+        dst_cs = dst_cs * 2.0 - 1.0
+        src_cs = src_cs * 2.0 - 1.0
 
         return dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts

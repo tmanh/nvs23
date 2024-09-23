@@ -2,6 +2,8 @@ import os
 from argparse import ArgumentParser
 import warnings
 
+import numpy as np
+
 from omegaconf import OmegaConf
 import torch
 from torch.nn import functional as F
@@ -151,6 +153,7 @@ def main(args) -> None:
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in loader:
+            dataset.n_samples = np.random.choice([3, 4, 5])
             dst_cs = dst_cs.float().to(device)
             src_cs = src_cs.float().to(device)
             src_ds = src_ds.float().to(device)
@@ -159,14 +162,14 @@ def main(args) -> None:
             src_Rts = src_Rts.float().to(device)
 
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
-            pred = renderer(
+            pred, _ = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
                 dst_Rts, torch.inverse(dst_Rts), 
             )
 
-            loss = F.mse_loss(input=pred, target=dst_cs, reduction="mean") * 0.1 + cobi(pred, dst_cs)
+            loss = F.mse_loss(input=pred, target=dst_cs[:, 0], reduction="mean") * 0.1 + cobi(pred, dst_cs[:, 0])
 
             opt.zero_grad()
             accelerator.backward(loss)
@@ -214,14 +217,14 @@ def main(args) -> None:
                     # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
                     with torch.no_grad():
                         # forward
-                        val_pred = renderer(
+                        val_pred, _ = renderer(
                             src_ds, src_cs,
                             K,
                             src_Rts, torch.inverse(src_Rts),
                             dst_Rts, torch.inverse(dst_Rts)
                         )
                         # compute metrics (loss, lpips, psnr)
-                        val_loss.append(F.mse_loss(input=val_pred, target=dst_cs, reduction="sum").item())
+                        val_loss.append(F.mse_loss(input=val_pred, target=dst_cs[:, 0], reduction="sum").item())
                         val_lpips.append(lpips_model(val_pred, dst_cs, normalize=True).mean().item())
                         val_psnr.append(calculate_psnr_pt(val_pred, dst_cs, crop_border=0).mean().item())
                     val_pbar.update(1)

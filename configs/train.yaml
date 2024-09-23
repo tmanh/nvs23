@@ -1,6 +1,6 @@
 model:
-  H: 96
-  W: 128
+  H: 128
+  W: 96
   radius: 1.5
   rad_pow: 2
   pp_pixel: 24
