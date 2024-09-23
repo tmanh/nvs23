@@ -41,17 +41,17 @@ class Fusion(nn.Module):
         B, V, C, H, W = prj_feats.shape
 
         ########### TO FEATURE
-        d = prj_depths.view(-1, 1, H, W)
+        d = prj_depths.contiguous().view(-1, 1, H, W)
         df = self.dconv(d)
-        vf = prj_feats.view(-1, C, H, W)
+        vf = prj_feats.contiguous().view(-1, C, H, W)
 
         ########### BASE ATTENTION
         vf = self.in_view1(vf)
         df = self.in_pts1(df)
 
         ########### CROSS-1/SPACE-1
-        vf = vf.view(B, V, C, H, W)
-        df = df.view(B, V, self.depth_dim, H, W)
+        vf = vf.contiguous().view(B, V, C, H, W)
+        df = df.contiguous().view(B, V, self.depth_dim, H, W)
         f = torch.cat([vf, df], dim=2)
 
         x = f[:, 0]
