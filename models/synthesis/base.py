@@ -135,7 +135,7 @@ class BaseModule(nn.Module):
 
         sh, sw = hf / hc, wf / wc
         sK = K.clone()
-        print(colors.shape, depths.shape)
+
         sK[:, 0, :] = sw * sK[:, 0, :]
         sK[:, 1, :] = sh * sK[:, 1, :]
 
