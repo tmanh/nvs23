@@ -172,17 +172,17 @@ class BaseModule(nn.Module):
 
     ##### DATA AUGMENTATION ###################################
 
-    def augment(self, output_imgs, warped, rotation=False):
+    def augment(self, feats, depths, rotation=False):
         if rotation:
             rotate_index = np.random.randint(0, 4)
-            warped = torch.rot90(warped, k=rotate_index, dims=[-2, -1])
-            output_imgs = torch.rot90(output_imgs, k=rotate_index, dims=[-2, -1])
+            depths = torch.rot90(depths, k=rotate_index, dims=[-2, -1])
+            feats = torch.rot90(feats, k=rotate_index, dims=[-2, -1])
 
         flip_index = np.random.randint(0, 1)
-        warped = self.augment_flip(warped, flip_index)
-        output_imgs = self.augment_flip(output_imgs, flip_index)
+        feats = self.augment_flip(feats, flip_index)
+        depths = self.augment_flip(depths, flip_index)
 
-        return output_imgs, warped
+        return feats, depths
 
     def augment_with_feats(self, output_imgs, gen_fs, warped, rotation=False):
         if rotation:
