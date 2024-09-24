@@ -173,6 +173,7 @@ def main(args) -> None:
                 dst_Rts, torch.inverse(dst_Rts), 
                 py=py, px=px, ps=ps
             )
+            dst_cs = dst_cs[..., py:py+ps, px:px+ps]
 
             loss = F.mse_loss(input=pred, target=dst_cs[:, 0], reduction="mean") * 0.1 + cobi(pred, dst_cs[:, 0])
 
