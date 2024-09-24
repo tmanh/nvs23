@@ -180,7 +180,7 @@ def main(args) -> None:
             src_cs = src_cs[..., py:py+ps, px:px+ps]
 
             loss = mse(raw, src_cs)
-            loss += cobi(pred, dst_cs[:, 0]) * 2
+            loss += cobi(pred, dst_cs[:, 0])
 
             opt.zero_grad()
             accelerator.backward(loss)
