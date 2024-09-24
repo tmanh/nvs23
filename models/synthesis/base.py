@@ -22,6 +22,14 @@ class BaseModule(nn.Module):
         self.init_models()
         self.freeze()
 
+    def to_train(self):
+        self.train()
+        self.freeze()
+
+    def to_eval(self):
+        self.eval()
+        self.freeze()
+
     @staticmethod
     def allocated():
         current = torch.cuda.memory_allocated(0)/1024/1024/1024

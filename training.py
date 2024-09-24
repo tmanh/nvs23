@@ -132,7 +132,7 @@ def main(args) -> None:
     cobi = ContextualBilateralLoss(device=device)
 
     # Prepare models for training:
-    renderer.train().to(device)
+    renderer.to_train().to(device)
     renderer, opt, loader, val_loader = accelerator.prepare(renderer, opt, loader, val_loader)
     pure_renderer = accelerator.unwrap_model(renderer)
 
@@ -204,7 +204,7 @@ def main(args) -> None:
 
             # Evaluate model:
             if global_step % cfg.train.val_every == 0:
-                renderer.eval()
+                renderer.to_eval()
                 val_loss = []
                 val_lpips = []
                 val_psnr = []
@@ -244,7 +244,7 @@ def main(args) -> None:
                         ("val/psnr", avg_val_psnr)
                     ]:
                         writer.add_scalar(tag, val, global_step)
-                renderer.train()
+                renderer.to_train()
             
             accelerator.wait_for_everyone()
 
