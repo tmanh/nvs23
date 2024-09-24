@@ -96,6 +96,67 @@ class Attention(nn.Module):     # NOTE: Spatial attention (MLP style)
         return rearrange(out, '(b x y) ... -> b x y ...', x = height, y = width)
 
 
+class SimpleAttention(nn.Module):     # NOTE: Spatial attention (MLP style)
+    def __init__(
+        self,
+        dim,
+        dim_head = 32,
+        dropout = 0.,
+        window_size = 7,
+        with_pe = True,
+    ):
+        super().__init__()
+        assert (dim % dim_head) == 0, 'dimension should be divisible by dimension per head'
+
+        self.heads = dim // dim_head
+        self.scale = dim_head ** -0.5
+
+        self.to_qkv = nn.Linear(dim, dim * 3, bias = False)
+
+        self.attend = nn.Sequential(
+            nn.Softmax(dim = -1),
+            nn.Dropout(dropout)
+        )
+
+        self.to_out = nn.Sequential(
+            nn.Linear(dim, dim, bias = False),
+            nn.Dropout(dropout)
+        )
+
+    def forward(self, x):
+        batch, height, width, window_height, window_width, _, device, h = *x.shape, x.device, self.heads
+
+        # flatten
+        x = rearrange(x, 'b x y w1 w2 d -> (b x y) (w1 w2) d')
+
+        # project for queries, keys, values
+        q, k, v = self.to_qkv(x).chunk(3, dim = -1)
+
+        # split heads
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d ) -> b h n d', h = h), (q, k, v))
+
+        # scale
+        q = q * self.scale
+
+        # sim
+        sim = einsum('b h i d, b h j d -> b h i j', q, k)
+
+        # attention
+        attn = self.attend(sim)
+
+        # aggregate
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+
+        # merge heads
+        out = rearrange(out, 'b h (w1 w2) d -> b w1 w2 (h d)', w1 = window_height, w2 = window_width)
+        x = rearrange(x, 'b (w1 w2) d -> b w1 w2 d', w1 = window_height, w2 = window_width)
+
+        # combine heads out
+        out = x + self.to_out(out)
+
+        return rearrange(out, '(b x y) ... -> b x y ...', x = height, y = width)
+
+
 class Block_Attention(nn.Module):     # NOTE: Spatial attention (Conv2D style)
     def __init__(
         self,
@@ -193,8 +254,50 @@ class Channel_Attention(nn.Module):  # NOTE: Channel Attention (Conv2D style)
 
         out = rearrange(out, 'b (h w) head d (ph pw) -> b (head d) (h ph) (w pw)', h=h//self.ps, w=w//self.ps, ph=self.ps, pw=self.ps, head=self.heads)
 
-
         out = self.project_out(out)
+
+        return out
+    
+
+class SimpleChannelAttention(nn.Module):  # NOTE: Channel Attention (Conv2D style)
+    def __init__(
+        self, 
+        dim, 
+        heads, 
+        bias=False, 
+        dropout = 0.,
+        window_size = 7
+    ):
+        super(SimpleChannelAttention, self).__init__()
+        self.heads = heads
+
+        self.temperature = nn.Parameter(torch.ones(heads, 1, 1))
+       
+        self.ps = window_size
+
+        self.qkv = nn.Conv2d(dim, dim*3, kernel_size=1, bias=bias)
+        self.qkv_dwconv = nn.Conv2d(dim*3, dim*3, kernel_size=3, stride=1, padding=1, groups=dim*3, bias=bias)
+        self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+
+        qkv = self.qkv_dwconv(self.qkv(x))
+        qkv = qkv.chunk(3, dim=1) 
+
+        q,k,v = map(lambda t: rearrange(t, 'b (head d) (h ph) (w pw) -> b (h w) head d (ph pw)', ph=self.ps, pw=self.ps, head=self.heads), qkv)
+        
+        q = F.normalize(q, dim=-1)
+        k = F.normalize(k, dim=-1)
+
+        attn = (q @ k.transpose(-2, -1)) * self.temperature 
+        attn = attn.softmax(dim=-1)
+        out =  (attn @ v)
+
+        out = rearrange(out, 'b (h w) head d (ph pw) -> b (head d) (h ph) (w pw)', h=h//self.ps, w=w//self.ps, ph=self.ps, pw=self.ps, head=self.heads)
+
+        out = x + self.project_out(out)
 
         return out
 
@@ -263,7 +366,6 @@ class OSA_Block(nn.Module):
             Rearrange('b x y w1 w2 d -> b d (x w1) (y w2)'),
             Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim = channel_num, dropout = dropout)),
 
-
             # channel-like attention
             Conv_PreNormResidual(channel_num, Channel_Attention(dim = channel_num, heads=4, dropout = dropout, window_size = window_size)),
             Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim = channel_num, dropout = dropout)),
@@ -276,6 +378,33 @@ class OSA_Block(nn.Module):
             # channel-like attention
             Conv_PreNormResidual(channel_num, Channel_Attention_grid(dim = channel_num, heads=4, dropout = dropout, window_size = window_size)),
             Conv_PreNormResidual(channel_num, Gated_Conv_FeedForward(dim = channel_num, dropout = dropout)),
+        )
+
+    def forward(self, x):
+        # Step 0: pad feature maps to multiples of window size
+        H, W = x.shape[-2:]
+        pad_r = (self.window_size - W % self.window_size) % self.window_size
+        pad_b = (self.window_size - H % self.window_size) % self.window_size
+        x = F.pad(x, (0, pad_r, 0, pad_b))
+
+        # Step 1: attention
+        out = self.layer(x)
+        return out[..., :H, :W]
+    
+
+class LOSABlock(nn.Module):
+    def __init__(self, channel_num=64, bias = True, ffn_bias=True, window_size=8, with_pe=False, dropout=0.0):
+        super(LOSABlock, self).__init__()
+
+        w = window_size
+        self.window_size = window_size
+
+        self.layer = nn.Sequential(
+            Rearrange('b d (x w1) (y w2) -> b x y w1 w2 d', w1 = w, w2 = w),  # block-like attention
+            PreNormResidual(channel_num, SimpleAttention(dim = channel_num, dim_head = channel_num//4, dropout = dropout, window_size = window_size, with_pe=with_pe)),
+            Rearrange('b x y w1 w2 d -> b d (x w1) (y w2)'),
+            Conv_PreNormResidual(channel_num, SimpleChannelAttention(dim = channel_num, heads=4, dropout = dropout, window_size = window_size)),
+            Conv_PreNormResidual(channel_num, Gated(dim = channel_num, dropout = dropout)),
         )
 
     def forward(self, x):

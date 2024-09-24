@@ -100,6 +100,17 @@ class Gated_Conv_FeedForward(nn.Module):
         return x
     
 
+class Gated(nn.Module):
+    def __init__(self, dim, mult = 1, bias=False, dropout = 0.):
+        super().__init__()
+
+        self.project = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+        self.residual = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+
+    def forward(self, x):
+        return self.project(x) * x + self.residual(x)
+    
+
 # MBConv
 class SqueezeExcitation(nn.Module):
     def __init__(self, dim, shrinkage_rate = 0.25):

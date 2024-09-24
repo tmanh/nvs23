@@ -113,6 +113,55 @@ class BaseModule(nn.Module):
         out = self.out(out)
 
         return out, warped
+    
+    def forward_train(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
+        shape = colors.shape[-2:]
+        fs = self.encoder(colors)
+
+        prj_fs, warped, prj_depths = self.project(
+            colors, depths, fs, K,
+            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
+            False
+        )
+        prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
+        prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
+        
+        if ps > 0:
+            prj_depths = prj_depths[
+                ...,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            prj_fs = prj_fs[
+                ...,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            shape = (ps, ps)
+
+        refined_fs = self.merge_net(
+            prj_fs, prj_depths
+        )
+
+        N, V, C, H, W = fs.shape
+        fs = fs.view(N * V, C, H, W)
+        fs = fs[
+            ...,
+            py // 4:py // 4 + ps // 4,
+            px // 4:px // 4 + ps // 4
+        ]
+
+        out = self.decode(shape, refined_fs)
+        raw = self.decode(shape, fs).view(N, V, 3, ps, ps)
+        return out, raw
+
+    def decode(self, shape, refined_fs):
+        out = self.up1(refined_fs)
+        out = F.interpolate(out, scale_factor=2, mode='nearest')
+        out = self.up2(out)
+        out = F.interpolate(out, size=shape, mode='nearest')
+        out = self.out(out)
+        return out
 
     def view_render(
             self, src_feats, src_pts,

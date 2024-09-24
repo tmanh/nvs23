@@ -6,7 +6,9 @@ import numpy as np
 
 from omegaconf import OmegaConf
 import torch
-from torch.nn import functional as F
+import torch.nn as nn
+import torch.nn.functional as F
+
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
@@ -150,6 +152,7 @@ def main(args) -> None:
         writer = SummaryWriter(exp_dir)
         print(f"Training for {max_steps} steps...")
     
+    mse = nn.MSELoss()
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in loader:
@@ -166,7 +169,7 @@ def main(args) -> None:
             H, W = src_cs.shape[-2:]
             py = np.random.randint(0, H - ps)
             px = np.random.randint(0, W - ps)
-            pred, _ = renderer(
+            pred, raw = renderer.forward_train(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
@@ -174,8 +177,10 @@ def main(args) -> None:
                 py=py, px=px, ps=ps
             )
             dst_cs = dst_cs[..., py:py+ps, px:px+ps]
+            src_cs = src_cs[..., py:py+ps, px:px+ps]
 
-            loss = F.mse_loss(input=pred, target=dst_cs[:, 0], reduction="mean") * 0.1 + cobi(pred, dst_cs[:, 0])
+            loss = mse(raw, src_cs)
+            loss += cobi(pred, dst_cs[:, 0]) * 2
 
             opt.zero_grad()
             accelerator.backward(loss)
