@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import torchvision.transforms.functional as Ft
 
 import os
 import random
@@ -295,6 +296,10 @@ class DiffData3:
         src_ds = F.interpolate(src_ds, size=(self.H, self.W), mode='nearest')
         src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
         dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
+
+        hue_adjustment = torch.FloatTensor(1).uniform_(-0.1, 0.1).item()
+        src_cs = F.adjust_hue(src_cs, hue_adjustment)
+        dst_cs = F.adjust_hue(dst_cs, hue_adjustment)
 
         dst_cs = dst_cs * 2.0 - 1.0
         src_cs = src_cs * 2.0 - 1.0
