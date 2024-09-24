@@ -25,10 +25,12 @@ class BaseModule(nn.Module):
     def to_train(self):
         self.train()
         self.freeze()
+        return self
 
     def to_eval(self):
         self.eval()
         self.freeze()
+        return self
 
     @staticmethod
     def allocated():
