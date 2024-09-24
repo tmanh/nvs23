@@ -81,6 +81,10 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
+    sd = torch.load('checkpoint/0100000.pt')
+    model.load_state_dict(sd)
+
+    H, W = 512, 384
 
     adepths = torch.tensor(np.load('wildrgb/apple_002/depths.npy'))
     adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
@@ -100,31 +104,62 @@ def main(args):
     aRTs_inv = torch.inverse(aRTs)
     dst_RTinvs = torch.inverse(dst_RTs)
 
-    depths = adepths
-    colors = acolors * 2.0 - 1.0
+    depths = adepths[:, 1:]
+    colors = acolors[:, 1:] * 2.0 - 1.0
     K = aK[:, 0]
-    src_RTs = aRTs
-    src_RTinvs = aRTs_inv
+    src_RTs = aRTs[:, 1:]
+    src_RTinvs = aRTs_inv[:, 1:]
 
-    # model.load_state_dict(sd['state_dict'], strict=True)
+    N, V, _, oH, oW = colors.shape
+    colors = F.interpolate(
+        colors.view(N * V, 3, oH, oW),
+        size=(H, W),
+        mode='bilinear',
+        align_corners=True,
+        antialias=True
+    ).view(N, V, 3, H, W)
+    depths = F.interpolate(
+        depths.view(N * V, 1, oH, oW),
+        size=(H, W),
+        mode='nearest'
+    ).view(N, V, 1, H, W)
+
+    K[:, 0] = W / oW * K[:, 0]
+    K[:, 1] = H / oH * K[:, 1]
+    
     model.eval()
     with torch.no_grad():
-        out, warped = model(
+        syn, warped = model(
             depths,
             colors,
             K,
-            src_RTinvs,
+            
             src_RTs,
+            src_RTinvs,
             
-            dst_RTinvs,
             dst_RTs, 
-            
-            visualize=True
+            dst_RTinvs,
+            visualize=True,
+            py=60,
+            px=60,
+            ps=256,
         )
 
-    out = ((acolors[:, 0] + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+    out = F.interpolate(
+        acolors[:, 0].view(1, 3, oH, oW),
+        size=(H, W),
+        mode='bilinear',
+        align_corners=True,
+        antialias=True
+    ).view(N, 3, H, W)
+    out = out[:, :, 60:306, 60:306]
+    out = (out * 255.0).clamp(0, 255.0)
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+
+    syn = ((syn + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+    syn = syn[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    cv2.imwrite('syn.png', cv2.cvtColor(syn, cv2.COLOR_RGB2BGR))
 
     warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
     for k in range(warped.shape[0]):

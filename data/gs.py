@@ -293,8 +293,8 @@ class DiffData3:
         dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
 
         src_ds = F.interpolate(src_ds, size=(self.H, self.W), mode='nearest')
-        src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='nearest')
-        dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='nearest')
+        src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
+        dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
 
         dst_cs = dst_cs * 2.0 - 1.0
         src_cs = src_cs * 2.0 - 1.0

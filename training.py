@@ -162,11 +162,16 @@ def main(args) -> None:
             src_Rts = src_Rts.float().to(device)
 
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
+            ps = 256
+            H, W = src_cs.shape[-2:]
+            py = np.random.randint(0, H - ps)
+            px = np.random.randint(0, W - ps)
             pred, _ = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
                 dst_Rts, torch.inverse(dst_Rts), 
+                py=py, px=px, ps=ps
             )
 
             loss = F.mse_loss(input=pred, target=dst_cs[:, 0], reduction="mean") * 0.1 + cobi(pred, dst_cs[:, 0])

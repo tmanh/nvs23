@@ -68,16 +68,30 @@ class BaseModule(nn.Module):
     
     ##### FORWARD ###################################
 
-    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False, py=-1, px=-1, ps=-1):
+        shape = colors.shape[-2:]
         fs = self.encoder(colors)
 
         prj_fs, warped, prj_depths = self.project(
             colors, depths, fs, K,
-            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs, True
+            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs, visualize
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
         
+        if ps > 0:
+            prj_depths = prj_depths[
+                :, :, :,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            prj_fs = prj_fs[
+                :, :, :,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            shape = (ps, ps)
+
         refined_fs = self.merge_net(
             prj_fs, prj_depths
         )
@@ -85,16 +99,9 @@ class BaseModule(nn.Module):
         out = self.up1(refined_fs)
         out = F.interpolate(out, scale_factor=2, mode='nearest')
         out = self.up2(out)
-        out = F.interpolate(out, size=colors.shape[-2:], mode='nearest')
+        out = F.interpolate(out, size=shape, mode='nearest')
         out = self.out(out)
 
-        # import cv2
-        # print(warped.shape)
-        # warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
-        # for k in range(warped.shape[0]):
-        #     out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        #     cv2.imwrite(f'out_{k}.png', out)
-        # exit()
         return out, warped
 
     def view_render(
