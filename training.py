@@ -152,7 +152,7 @@ def main(args) -> None:
         writer = SummaryWriter(exp_dir)
         print(f"Training for {max_steps} steps...")
     
-    mse = nn.MSELoss()
+    l1 = nn.L1Loss()
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in loader:
@@ -179,7 +179,7 @@ def main(args) -> None:
             dst_cs = dst_cs[..., py:py+ps, px:px+ps]
             src_cs = src_cs[..., py:py+ps, px:px+ps]
 
-            loss = mse(raw, src_cs)
+            loss = l1(raw, src_cs)
             loss += cobi(pred, dst_cs[:, 0])
 
             opt.zero_grad()
