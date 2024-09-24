@@ -64,7 +64,7 @@ class ICATBlock(nn.Module):
     """
 
     def __init__(
-            self, dim, num_heads, window_size, mlp_ratio=4.,
+            self, dim, blend_dim, mask_dim, num_heads, window_size, mlp_ratio=4.,
             act_layer=nn.GELU, norm_layer=nn.LayerNorm
         ):
         super().__init__()
@@ -79,33 +79,41 @@ class ICATBlock(nn.Module):
             num_heads=num_heads,
         )
 
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(
-            in_features=dim,
-            hidden_features=mlp_hidden_dim,
-            out_features=dim, act_layer=act_layer
+        self.alpha_blend = nn.Conv2d(
+            blend_dim, dim, stride=1, kernel_size=1, padding=0
+        )
+        self.mask_alpha_blend = nn.Conv2d(
+            blend_dim, mask_dim, stride=1, kernel_size=1, padding=0
         )
         
-        # need to be changed in different stage during forward phase
-        self.H = None
-        self.W = None
-        
-    def forward(self, x, y):
+    def forward(self, x, y, xm, ym):
         H, W = x.shape[-2:]
         pad_r = (self.window_size - W % self.window_size) % self.window_size
         pad_b = (self.window_size - H % self.window_size) % self.window_size
         x = F.pad(x, (0, pad_r, 0, pad_b))
         y = F.pad(y, (0, pad_r, 0, pad_b))
 
-        x = rearrange(x, 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
-
         for i in range(y.shape[1]):
+            x = rearrange(x, 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
             t = rearrange(y[:, i], 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
-            x = x + self.attn(x, t, t)
-        
-        x = x + self.mlp(self.norm2(x))
+            
+            crs = self.attn(x, t, t)
+            _ym = ym[:, i]
+            
+            crs = rearrange(crs, 'b x y w1 w2 d -> b d (x w1) (y w2)')
+            x = rearrange(x, 'b x y w1 w2 d -> b d (x w1) (y w2)')
+            
+            merge = torch.cat(
+                [
+                    x, crs, xm, _ym
+                ],
+                dim=1,
+            )
 
-        x = rearrange(x, 'b x y w1 w2 d -> b d (x w1) (y w2)')
-        
+            alpha = torch.sigmoid(self.alpha_blend(merge))
+            alpha_mask = torch.sigmoid(self.mask_alpha_blend(merge))
+
+            xm = xm * alpha_mask + _ym * (1 - alpha_mask)
+            x = x * alpha + crs * (1 - alpha)
+
         return x[..., :H, :W]

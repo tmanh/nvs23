@@ -15,8 +15,8 @@ class Fusion(nn.Module):
         self.dconv = nn.Conv2d(1, depth_dim, 3, 1, 1)
         self.in_pts1 = OSA_Block(depth_dim, window_size=w1, dropout=dropout, with_pe=with_pe)
 
-        self.cross = ICATBlock(in_dim + depth_dim, window_size=w1, num_heads=8)
-        self.spatial = LOSABlock(in_dim + depth_dim, window_size=w1)
+        self.cross = ICATBlock(in_dim, (in_dim + depth_dim) * 2, depth_dim, window_size=w1, num_heads=8)
+        self.spatial = LOSABlock(in_dim, window_size=w1)
 
     def forward(self, prj_feats, prj_depths):
         B, V, C, H, W = prj_feats.shape
@@ -35,11 +35,13 @@ class Fusion(nn.Module):
         df = df.contiguous().view(B, V, self.depth_dim, H, W)
         f = torch.cat([vf, df], dim=2)
 
-        x = f[:, 0]
-        y = f[:, 1:]
+        x = vf[:, 0]
+        y = vf[:, 1:]
+        xm = df[:, 0]
+        ym = df[:, 1:]
 
         for _ in range(5):
-            x = self.cross(x, y)
+            x = self.cross(x, y, xm, ym)
             x = self.spatial(x)
 
         return x[:, :C]
