@@ -298,8 +298,8 @@ class DiffData3:
         dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
 
         hue_adjustment = torch.FloatTensor(1).uniform_(-0.1, 0.1).item()
-        src_cs = F.adjust_hue(src_cs, hue_adjustment)
-        dst_cs = F.adjust_hue(dst_cs, hue_adjustment)
+        src_cs = Ft.adjust_hue(src_cs, hue_adjustment)
+        dst_cs = Ft.adjust_hue(dst_cs, hue_adjustment)
 
         dst_cs = dst_cs * 2.0 - 1.0
         src_cs = src_cs * 2.0 - 1.0
