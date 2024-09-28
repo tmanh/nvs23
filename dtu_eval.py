@@ -81,7 +81,7 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    sd = torch.load('checkpoint/0020000.pt')
+    sd = torch.load('checkpoint/0010000.pt')
     model.load_state_dict(sd)
 
     H, W = 512, 384
@@ -129,19 +129,7 @@ def main(args):
     
     model.eval()
     with torch.no_grad():
-        # syn, warped = model(
-        #     depths,
-        #     colors,
-        #     K,
-            
-        #     src_RTs,
-        #     src_RTinvs,
-            
-        #     dst_RTs, 
-        #     dst_RTinvs,
-        #     visualize=True,
-        # )
-        syn, warped = model.forward_train(
+        syn, warped = model(
             depths,
             colors,
             K,
@@ -151,8 +139,20 @@ def main(args):
             
             dst_RTs, 
             dst_RTinvs,
-            ps=256, py=60, px=60
+            visualize=True,
         )
+        # syn, warped = model.forward_train(
+        #     depths,
+        #     colors,
+        #     K,
+            
+        #     src_RTs,
+        #     src_RTinvs,
+            
+        #     dst_RTs, 
+        #     dst_RTinvs,
+        #     ps=256, py=60, px=60
+        # )
 
     out = F.interpolate(
         acolors[:, 0].view(1, 3, oH, oW),
@@ -161,18 +161,19 @@ def main(args):
         align_corners=True,
         antialias=True
     ).view(N, 3, H, W)
+    
     out = (out * 255.0).clamp(0, 255.0)
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    cv2.imwrite('out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    cv2.imwrite('output/out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
     syn = ((syn + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
     syn = syn[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    cv2.imwrite('syn.png', cv2.cvtColor(syn, cv2.COLOR_RGB2BGR))
+    cv2.imwrite('output/syn.png', cv2.cvtColor(syn, cv2.COLOR_RGB2BGR))
 
     warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
     for k in range(warped.shape[0]):
         out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        cv2.imwrite(f'out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f'output/out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
 
 if __name__ == "__main__":
