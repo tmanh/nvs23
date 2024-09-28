@@ -103,7 +103,7 @@ class Fusion(nn.Module):
         fs2 = self.enc2(fs2, ds2)
         fs3 = self.enc3(fs3, ds3)
         fs4 = self.enc4(fs4, ds4)
-        print(fs1.shape)
+
         dfs2 = self.down1(fs1)
         dfs3 = self.down2(dfs2)
         dfs4 = self.down3(dfs3)
@@ -113,7 +113,7 @@ class Fusion(nn.Module):
 
         dfs2 = self.up2(torch.cat([dfs3, fs3], dim=1))
         dfs2 = F.interpolate(dfs2, size=fs2.shape[-2:], mode='nearest')
-
+        print(dfs2.shape, fs2.shape)
         dfs1 = self.up1(torch.cat([dfs2, fs2], dim=1))
         dfs1 = F.interpolate(dfs1, size=fs1.shape[-2:], mode='nearest')
 
