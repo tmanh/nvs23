@@ -36,7 +36,7 @@ class CrossAttention(nn.Module):
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, Nq, C)
-        x = v + self.proj(x)
+        x = x + self.proj(x)
         x = self.proj_drop(x)
 
         x = rearrange(x, '(b x y) (w1 w2) d -> b x y w1 w2 d', x=X, y=Y, w1=W1, w2=W2)
