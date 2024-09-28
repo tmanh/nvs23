@@ -83,7 +83,7 @@ class Fusion(nn.Module):
             B, V, 64, H // 8, 8, W // 8, 8).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B * V, 4096, H // 8, W // 8)
             
         fs2 = self.prj_2(fs2).view(B, V, 192, H // 2, W // 2)
-        fs3 = self.prj_3(fs2).view(B, V, 384, H // 2, W // 2)
-        fs4 = self.prj_4(fs2).view(B, V, 786, H // 2, W // 2)
+        fs3 = self.prj_3(fs3).view(B, V, 384, H // 2, W // 2)
+        fs4 = self.prj_4(fs4).view(B, V, 786, H // 2, W // 2)
 
         return fs1, fs2, fs3, fs4
