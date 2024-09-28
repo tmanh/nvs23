@@ -43,10 +43,10 @@ class Fusion(nn.Module):
         )
 
         ########### STAGE BASE ATTENTION
-        self.enc1 = FusionBlock(96, window_size=window_size)
-        self.enc2 = FusionBlock(192, window_size=window_size)
-        self.enc3 = FusionBlock(384, window_size=window_size)
-        self.enc4 = FusionBlock(768, window_size=window_size)
+        self.enc1 = FusionBlock(96, window_size=8)
+        self.enc2 = FusionBlock(192, window_size=6)
+        self.enc3 = FusionBlock(384, window_size=4)
+        self.enc4 = FusionBlock(768, window_size=4)
 
         self.down1 = nn.Sequential(
             nn.GELU(),
