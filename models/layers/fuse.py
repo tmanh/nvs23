@@ -16,7 +16,7 @@ class FusionBlock(nn.Module):
         y = vf[:, 1:]
         xm = df[:, 0]
         ym = df[:, 1:]
-        print(x.shape, y.shape, xm.shape, ym.shape)
+
         x = self.cross(x, y, xm, ym)
         x = self.spatial(x)
 

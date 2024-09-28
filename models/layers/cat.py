@@ -92,6 +92,8 @@ class ICATBlock(nn.Module):
         pad_b = (self.window_size - H % self.window_size) % self.window_size
         x = F.pad(x, (0, pad_r, 0, pad_b))
         y = F.pad(y, (0, pad_r, 0, pad_b))
+        xm = F.pad(xm, (0, pad_r, 0, pad_b))
+        ym = F.pad(ym, (0, pad_r, 0, pad_b))
 
         for i in range(y.shape[1]):
             x = rearrange(x, 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
@@ -102,7 +104,6 @@ class ICATBlock(nn.Module):
             
             crs = rearrange(crs, 'b x y w1 w2 d -> b d (x w1) (y w2)')
             x = rearrange(x, 'b x y w1 w2 d -> b d (x w1) (y w2)')
-            print(x.shape, crs.shape, xm.shape, _ym.shape)
             merge = torch.cat(
                 [
                     x, crs, xm, _ym
