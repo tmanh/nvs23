@@ -20,7 +20,7 @@ class FusionBlock(nn.Module):
         x = self.cross(x, y, xm, ym)
         x = self.spatial(x)
 
-        return x[:, :-1]
+        return x
 
 
 class Fusion(nn.Module):
@@ -103,7 +103,7 @@ class Fusion(nn.Module):
         fs2 = self.enc2(fs2, ds2)
         fs3 = self.enc3(fs3, ds3)
         fs4 = self.enc4(fs4, ds4)
-
+        print(fs1.shape)
         dfs2 = self.down1(fs1)
         dfs3 = self.down2(dfs2)
         dfs4 = self.down3(dfs3)
