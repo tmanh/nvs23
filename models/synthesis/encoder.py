@@ -16,16 +16,16 @@ class SwinColorFeats(nn.Module):
         self.pre_conv = nn.ModuleList(
             [
                 nn.Sequential(
+                    nn.GELU(),
                     nn.Conv2d(768, 64, 3, 1, 1),
-                    nn.GELU(),
                 ),
                 nn.Sequential(
+                    nn.GELU(),
                     nn.Conv2d(384, 32, 3, 1, 1),
-                    nn.GELU(),
                 ),
                 nn.Sequential(
-                    nn.Conv2d(192, 64, 3, 1, 1),
                     nn.GELU(),
+                    nn.Conv2d(192, 64, 3, 1, 1),
                 ),
                 None
             ]
@@ -35,10 +35,6 @@ class SwinColorFeats(nn.Module):
         B, V, C, H, W = colors.shape
         with torch.no_grad():
             feats = self.backbone(colors.view(-1, C, H, W))
-
-        for f in feats:
-            print(f.shape, f.min(), f.max())
-        exit()
 
         hf, wf = feats[0].shape[-2:]
         merge = []
