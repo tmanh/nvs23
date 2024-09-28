@@ -84,6 +84,6 @@ class Fusion(nn.Module):
             
         fs2 = self.prj_2(fs2).view(B, V, 192, H // 2, W // 2)
         fs3 = self.prj_3(fs3).view(B, V, 384, H // 4, W // 4)
-        fs4 = self.prj_4(fs4).view(B, V, 786, H // 8, W // 8)
+        fs4 = self.prj_4(fs4).view(B, V, 768, H // 8, W // 8)
 
         return fs1, fs2, fs3, fs4
