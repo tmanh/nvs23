@@ -1,12 +1,9 @@
-import math
-import random
 import numpy as np
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.losses.synthesis import SynthesisLoss
 from models.losses.multi_view import *
 
 from models.projection.z_buffer_manipulator import Screen_PtsManipulator

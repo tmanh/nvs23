@@ -81,8 +81,8 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0020000.pt')
-    model.load_state_dict(sd)
+    # sd = torch.load('exp/checkpoints/0020000.pt')
+    # model.load_state_dict(sd)
 
     H, W = 512, 384
 
