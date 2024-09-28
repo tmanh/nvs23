@@ -117,7 +117,7 @@ class Fusion(nn.Module):
         dfs1 = self.up3(torch.cat([dfs2, fs2], dim=1))
         dfs1 = F.interpolate(dfs1, size=fs1.shape[-2:], mode='nearest')
 
-        out = self.out(torch.cat([dfs1, fs1], dim=1))
+        out = fs1 + self.out(torch.cat([dfs1, fs1], dim=1))
 
         return out
 
