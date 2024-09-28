@@ -23,11 +23,11 @@ class Fusion(nn.Module):
 
         fs1 = prj_feats[:, :, :96]
         fs2 = prj_feats[:, :, 96:160].view(
-            B, V, 64, H // 2, 2, W // 2, 2).permute(0, 1, 2, 4, 6, 3, 5).view(B, V, 256, H // 2, W // 2)
+            B, V, 64, H // 2, 2, W // 2, 2).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B, V, 256, H // 2, W // 2)
         fs3 = prj_feats[:, :, 160:192].view(
-            B, V, 32, H // 4, 4, W // 4, 4).permute(0, 1, 2, 4, 6, 3, 5).view(B, V, 256, H // 4, W // 4)
+            B, V, 32, H // 4, 4, W // 4, 4).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B, V, 256, H // 4, W // 4)
         fs4 = prj_feats[:, :, 192:].view(
-            B, V, 64, H // 8, 8, W // 8, 8).permute(0, 1, 2, 4, 6, 3, 5).view(B, V, 1024, H // 8, W // 8)
+            B, V, 64, H // 8, 8, W // 8, 8).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B, V, 1024, H // 8, W // 8)
 
         print(prj_feats.shape, fs1.shape, fs2.shape, fs3.shape, fs4.shape)
         exit()
