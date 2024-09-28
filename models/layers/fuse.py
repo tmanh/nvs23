@@ -4,6 +4,8 @@ from .cat import ICATBlock
 
 class FusionBlock(nn.Module):
     def __init__(self, in_dim, window_size) -> None:
+        super().__init__()
+
         w1 = window_size
 
         self.cross = ICATBlock(in_dim, (in_dim + 1) * 2, 1, window_size=w1, num_heads=8)
@@ -22,10 +24,8 @@ class FusionBlock(nn.Module):
 
 
 class Fusion(nn.Module):
-    def __init__(self, in_dim=256, depth_dim=16, window_size=8, dropout=0.0, with_pe=False) -> None:
+    def __init__(self, window_size=8) -> None:
         super().__init__()
-
-        w1 = window_size
 
         self.prj_2 = nn.Sequential(
             nn.GELU(),
