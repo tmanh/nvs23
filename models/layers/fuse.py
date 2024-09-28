@@ -118,8 +118,7 @@ class Fusion(nn.Module):
         dfs1 = F.interpolate(dfs1, size=fs1.shape[-2:], mode='nearest')
 
         out = self.out(torch.cat([dfs1, fs1], dim=1))
-        print(out.shape)
-        exit()
+
         return out
 
     def split(self, prj_feats, B, V, H, W):
