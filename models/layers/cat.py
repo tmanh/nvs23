@@ -102,7 +102,7 @@ class ICATBlock(nn.Module):
             
             crs = rearrange(crs, 'b x y w1 w2 d -> b d (x w1) (y w2)')
             x = rearrange(x, 'b x y w1 w2 d -> b d (x w1) (y w2)')
-            
+            print(x.shape, crs.shape, xm.shape, _ym.shape)
             merge = torch.cat(
                 [
                     x, crs, xm, _ym

@@ -102,7 +102,6 @@ class Fusion(nn.Module):
         fs1 = self.enc1(fs1, ds1)
         fs2 = self.enc2(fs2, ds2)
         fs3 = self.enc3(fs3, ds3)
-        print(fs4.shape, ds4.shape)
         fs4 = self.enc4(fs4, ds4)
 
         dfs2 = self.down1(fs1)
