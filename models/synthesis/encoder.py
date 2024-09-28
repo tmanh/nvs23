@@ -36,6 +36,10 @@ class SwinColorFeats(nn.Module):
         with torch.no_grad():
             feats = self.backbone(colors.view(-1, C, H, W))
 
+        for f in feats:
+            print(f.shape, f.min(), f.max())
+        exit()
+
         hf, wf = feats[0].shape[-2:]
         merge = []
         for i, f in enumerate(feats[::-1]):
