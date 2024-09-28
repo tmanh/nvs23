@@ -141,7 +141,7 @@ class BaseModule(nn.Module):
         )
 
         N, V, C, H, W = fs.shape
-        fs = fs[:, :96].view(N * V, 96, H, W)
+        fs = fs[:, :, :96].view(N * V, 96, H, W)
         fs = fs[
             ...,
             py // 4:py // 4 + ps // 4,
