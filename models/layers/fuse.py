@@ -18,7 +18,7 @@ class FusionBlock(nn.Module):
         x = self.cross(x, y, xm, ym)
         x = self.spatial(x)
 
-        return x
+        return x[:, :-1]
 
 
 class Fusion(nn.Module):
@@ -43,35 +43,84 @@ class Fusion(nn.Module):
         )
 
         ########### STAGE BASE ATTENTION
-        self.cross = ICATBlock(in_dim, (in_dim + 1) * 2, 1, window_size=w1, num_heads=8)
-        self.spatial = LOSABlock(in_dim, window_size=w1)
+        self.enc1 = FusionBlock(96, window_size=window_size)
+        self.enc2 = FusionBlock(192, window_size=window_size)
+        self.enc3 = FusionBlock(384, window_size=window_size)
+        self.enc4 = FusionBlock(768, window_size=window_size)
+
+        self.down1 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(96, 192, 3, 2, 1)
+        )
+        self.down2 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(192, 384, 3, 2, 1)
+        )
+        self.down3 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(384, 768, 3, 2, 1)
+        )
+
+        self.up1 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(768 * 2, 384, 3, 1, 1)
+        )
+        self.up2 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(384 * 2, 192, 3, 1, 1)
+        )
+        self.up3 = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(192 * 2, 96, 3, 1, 1)
+        )
+
+        self.out = nn.Sequential(
+            nn.GELU(),
+            nn.Conv2d(96 * 2, 96, 3, 1, 1)
+        )
+
+    def depth_split(self, d):
+        N, V, _, H, W = d.shape
+        d1 = d.view(N * V, -1, H, W)
+        d2 = F.interpolate(d1, size=(H // 2, W // 2), mode='nearest')
+        d3 = F.interpolate(d1, size=(H // 4, W // 4), mode='nearest')
+        d4 = F.interpolate(d1, size=(H // 8, W // 8), mode='nearest')
+
+        return (
+            d1.view(N, V, -1, H, W),
+            d2.view(N, V, -1, H // 2, W // 2),
+            d3.view(N, V, -1, H // 4, W // 4),
+            d4.view(N, V, -1, H // 8, W // 8),
+        )
 
     def forward(self, prj_feats, prj_depths):
-        B, V, C, H, W = prj_feats.shape
+        B, V, _, H, W = prj_feats.shape
 
         fs1, fs2, fs3, fs4 = self.split(prj_feats, B, V, H, W)
+        ds1, ds2, ds3, ds4 = self.depth_split(prj_depths)
 
-        print(prj_feats.shape, fs1.shape, fs2.shape, fs3.shape, fs4.shape)
+        fs1 = self.enc1(fs1, ds1)
+        fs2 = self.enc2(fs2, ds2)
+        fs3 = self.enc3(fs3, ds3)
+        fs4 = self.enc4(fs4, ds4)
+
+        dfs2 = self.down1(fs1)
+        dfs3 = self.down2(dfs2)
+        dfs4 = self.down3(dfs3)
+        
+        dfs3 = self.up1(torch.cat([dfs4, fs4], dim=1))
+        dfs3 = F.interpolate(dfs3, size=fs3.shape[-2:], mode='nearest')
+
+        dfs2 = self.up2(torch.cat([dfs3, fs3], dim=1))
+        dfs2 = F.interpolate(dfs2, size=fs2.shape[-2:], mode='nearest')
+
+        dfs1 = self.up1(torch.cat([dfs2, fs2], dim=1))
+        dfs1 = F.interpolate(dfs1, size=fs1.shape[-2:], mode='nearest')
+
+        out = self.out(torch.cat([dfs1, fs1], dim=1))
+        print(out.shape)
         exit()
-
-        ########### TO FEATURE
-        d = prj_depths.contiguous().view(-1, 1, H, W)
-        vf = prj_feats.contiguous().view(-1, C, H, W)
-
-        ########### CROSS/SPACE
-        vf = vf.contiguous().view(B, V, C, H, W)
-        df = d.contiguous().view(B, V, 1, H, W)
-
-        x = vf[:, 0]
-        y = vf[:, 1:]
-        xm = df[:, 0]
-        ym = df[:, 1:]
-
-        for _ in range(5):
-            x = self.cross(x, y, xm, ym)
-            x = self.spatial(x)
-
-        return x[:, :C]
+        return out
 
     def split(self, prj_feats, B, V, H, W):
         fs1 = prj_feats[:, :, :96]
