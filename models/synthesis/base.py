@@ -149,6 +149,7 @@ class BaseModule(nn.Module):
         ]
 
         out = self.decode(shape, refined_fs)
+        print(fs.shape)
         raw = self.decode(shape, fs).view(N, V, 3, ps, ps)
         return out, raw
 
