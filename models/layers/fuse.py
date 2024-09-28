@@ -81,7 +81,7 @@ class Fusion(nn.Module):
 
     def depth_split(self, d):
         N, V, _, H, W = d.shape
-        d1 = d.view(N * V, -1, H, W)
+        d1 = d.contiguous().view(N * V, -1, H, W)
         d2 = F.interpolate(d1, size=(H // 2, W // 2), mode='nearest')
         d3 = F.interpolate(d1, size=(H // 4, W // 4), mode='nearest')
         d4 = F.interpolate(d1, size=(H // 8, W // 8), mode='nearest')
