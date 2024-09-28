@@ -21,6 +21,9 @@ class Fusion(nn.Module):
     def forward(self, prj_feats, prj_depths):
         B, V, C, H, W = prj_feats.shape
 
+        print(prj_feats.shape)
+        exit()
+
         ########### TO FEATURE
         d = prj_depths.contiguous().view(-1, 1, H, W)
         df = self.dconv(d)

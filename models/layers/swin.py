@@ -628,7 +628,7 @@ class SwinTransformerV2(nn.Module):
 
     def load_pretrained(self):
         if isinstance(self.pretrain, str):
-            state_dict = torch.load(self.pretrain)
+            state_dict = torch.load(self.pretrain, weights_only=False)
         self = self.load_state_dict(state_dict['model'], strict=False)
 
 
