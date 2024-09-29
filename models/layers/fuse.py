@@ -94,10 +94,10 @@ class Fusion(nn.Module):
         fs3 = self.down2(fs2)
         fs4 = self.down3(fs3)
 
-        mfs1 = self.enc1(fs1, ds1)
-        mfs2 = self.enc2(fs2, ds2)
-        mfs3 = self.enc3(fs3, ds3)
-        mfs4 = self.enc4(fs4, ds4)
+        mfs1 = self.enc1(fs1.view(B, V, -1, *ds1.shape[-2:]), ds1)
+        mfs2 = self.enc2(fs2.view(B, V, -1, *ds2.shape[-2:]), ds2)
+        mfs3 = self.enc3(fs3.view(B, V, -1, *ds3.shape[-2:]), ds3)
+        mfs4 = self.enc4(fs4.view(B, V, -1, *ds4.shape[-2:]), ds4)
 
         mfs3 = self.up1(torch.cat([mfs4, fs4], dim=1))
         mfs3 = F.interpolate(mfs3, size=fs3.shape[-2:], mode='nearest')
