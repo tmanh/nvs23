@@ -18,7 +18,7 @@ class FusionBlock(nn.Module):
         ym = df[:, 1:]
 
         x = self.cross(x, y, xm, ym)
-        # x = self.spatial(x)
+        x = self.spatial(x)
 
         return x
 
