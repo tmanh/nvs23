@@ -24,22 +24,12 @@ class FusionBlock(nn.Module):
 
 
 class Fusion(nn.Module):
-    def __init__(self, window_size=8) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
-        self.prj_2 = nn.Sequential(
+        self.prj = nn.Sequential(
             nn.GELU(),
-            nn.Conv2d(256, 192, 3, 1, 1)
-        )
-
-        self.prj_3 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(512, 384, 3, 1, 1)
-        )
-
-        self.prj_4 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(4096, 768, 3, 1, 1)
+            nn.Conv2d(256, 96, 3, 1, 1)
         )
 
         ########### STAGE BASE ATTENTION
@@ -50,7 +40,7 @@ class Fusion(nn.Module):
 
         self.down1 = nn.Sequential(
             nn.GELU(),
-            nn.Conv2d(96, 192, 3, 2, 1)
+            nn.Conv2d(256, 192, 3, 2, 1)
         )
         self.down2 = nn.Sequential(
             nn.GELU(),
@@ -96,28 +86,29 @@ class Fusion(nn.Module):
     def forward(self, prj_feats, prj_depths):
         B, V, _, H, W = prj_feats.shape
 
-        fs1, fs2, fs3, fs4 = self.split(prj_feats, B, V, H, W)
         ds1, ds2, ds3, ds4 = self.depth_split(prj_depths)
 
-        fs1 = self.enc1(fs1, ds1)
-        fs2 = self.enc2(fs2, ds2)
-        fs3 = self.enc3(fs3, ds3)
-        fs4 = self.enc4(fs4, ds4)
+        prj_feats_reshape = prj_feats.view(B * V, -1, H, W)
+        fs1 = prj_feats_reshape[:, :96] + self.prj(prj_feats_reshape)
+        fs2 = self.down1(fs1)
+        fs3 = self.down2(fs2)
+        fs4 = self.down3(fs3)
 
-        dfs2 = self.down1(fs1)
-        dfs3 = self.down2(dfs2)
-        dfs4 = self.down3(dfs3)
-        
-        dfs3 = self.up1(torch.cat([dfs4, fs4], dim=1))
-        dfs3 = F.interpolate(dfs3, size=fs3.shape[-2:], mode='nearest')
+        mfs1 = self.enc1(fs1, ds1)
+        mfs2 = self.enc2(fs2, ds2)
+        mfs3 = self.enc3(fs3, ds3)
+        mfs4 = self.enc4(fs4, ds4)
 
-        dfs2 = self.up2(torch.cat([dfs3, fs3], dim=1))
-        dfs2 = F.interpolate(dfs2, size=fs2.shape[-2:], mode='nearest')
+        mfs3 = self.up1(torch.cat([mfs4, fs4], dim=1))
+        mfs3 = F.interpolate(mfs3, size=fs3.shape[-2:], mode='nearest')
 
-        dfs1 = self.up3(torch.cat([dfs2, fs2], dim=1))
-        dfs1 = F.interpolate(dfs1, size=fs1.shape[-2:], mode='nearest')
+        mfs2 = self.up2(torch.cat([mfs3, fs3], dim=1))
+        mfs2 = F.interpolate(mfs2, size=fs2.shape[-2:], mode='nearest')
 
-        out = fs1 + self.out(torch.cat([dfs1, fs1], dim=1))
+        mfs1 = self.up3(torch.cat([mfs2, fs2], dim=1))
+        mfs1 = F.interpolate(mfs1, size=fs1.shape[-2:], mode='nearest')
+
+        out = fs1 + self.out(torch.cat([mfs1, fs1], dim=1))
 
         return out
 
