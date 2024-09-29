@@ -74,16 +74,25 @@ class ICATBlock(nn.Module):
         self.window_size = window_size
         
         self.norm1 = norm_layer(dim)
-        self.attn = CrossAttention(
-            dim=dim,
-            num_heads=num_heads,
+        
+        self.attn1 = nn.Conv2d(
+            blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=1
         )
-
-        self.alpha_blend = nn.Conv2d(
-            blend_dim, dim, stride=1, kernel_size=1, padding=0
+        self.attn2 = nn.Conv2d(
+            blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=2
         )
-        self.mask_alpha_blend = nn.Conv2d(
-            blend_dim, mask_dim, stride=1, kernel_size=1, padding=0
+        self.attn3 = nn.Conv2d(
+            blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=4
+        )
+        self.alpha_blend = nn.Sequential(
+            nn.Conv2d(
+                dim * 3, dim, kernel_size=1, stride=1, padding=0
+            ), nn.Sigmoid(),
+        )
+        self.mask_alpha_blend = nn.Sequential(
+            nn.Conv2d(
+                dim * 3, mask_dim, kernel_size=1, stride=1, padding=0
+            ), nn.Sigmoid(),
         )
         
     def forward(self, x, y, xm, ym):
@@ -96,25 +105,22 @@ class ICATBlock(nn.Module):
         ym = F.pad(ym, (0, pad_r, 0, pad_b))
 
         for i in range(y.shape[1]):
-            x = rearrange(x, 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
-            t = rearrange(y[:, i], 'b d (x w1) (y w2) -> b x y w1 w2 d', w1=self.window_size, w2=self.window_size)
-            
-            crs = self.attn(x, t, t)
-            _ym = ym[:, i]
-            
-            crs = rearrange(crs, 'b x y w1 w2 d -> b d (x w1) (y w2)')
-            x = rearrange(x, 'b x y w1 w2 d -> b d (x w1) (y w2)')
             merge = torch.cat(
                 [
-                    x, crs, xm, _ym
+                    x, y[:, i], xm, ym[:, i]
                 ],
                 dim=1,
             )
 
-            alpha = torch.sigmoid(self.alpha_blend(merge))
-            alpha_mask = torch.sigmoid(self.mask_alpha_blend(merge))
+            attn1 = self.attn1(merge)
+            attn2 = self.attn2(merge)
+            attn3 = self.attn3(merge)
 
-            xm = xm * alpha_mask + _ym * (1 - alpha_mask)
-            x = x * alpha + crs * (1 - alpha)
+            all_attn = torch.cat([attn1, attn2, attn3], dim=1)
+            alpha = self.alpha_blend(all_attn)
+            alpha_mask = self.mask_alpha_blend(all_attn)
 
-        return x[..., :H, :W]
+            xm = xm * alpha_mask + ym[:, i] * (1 - alpha_mask)
+            x = x * alpha + y[:, i] * (1 - alpha)
+
+        return x
