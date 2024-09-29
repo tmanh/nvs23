@@ -40,7 +40,7 @@ class Fusion(nn.Module):
 
         self.down1 = nn.Sequential(
             nn.GELU(),
-            nn.Conv2d(256, 192, 3, 2, 1)
+            nn.Conv2d(96, 192, 3, 2, 1)
         )
         self.down2 = nn.Sequential(
             nn.GELU(),
