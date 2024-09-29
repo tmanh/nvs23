@@ -166,7 +166,7 @@ def main(args) -> None:
 
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
             ps = 256
-            H, W = src_cs.shape[-2:]
+            N, V, _, H, W = src_cs.shape
             py = np.random.randint(0, H - ps)
             px = np.random.randint(0, W - ps)
             raw = renderer.forward_stage1(
@@ -179,7 +179,7 @@ def main(args) -> None:
             dst_cs = dst_cs[..., py:py+ps, px:px+ps]
             src_cs = src_cs[..., py:py+ps, px:px+ps]
 
-            loss = l1(raw, src_cs) + cobi(raw, src_cs[:, 0])
+            loss = l1(raw, src_cs) + cobi(raw.view(N * V, -1, ps, ps), src_cs[:, 0])
 
             opt.zero_grad()
             accelerator.backward(loss)
