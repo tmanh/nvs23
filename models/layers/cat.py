@@ -79,10 +79,10 @@ class ICATBlock(nn.Module):
             blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=1
         )
         self.attn2 = nn.Conv2d(
-            blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=2
+            blend_dim, dim, kernel_size=3, stride=1, padding=2, dilation=2
         )
         self.attn3 = nn.Conv2d(
-            blend_dim, dim, kernel_size=3, stride=1, padding=1, dilation=4
+            blend_dim, dim, kernel_size=3, stride=1, padding=4, dilation=4
         )
         self.alpha_blend = nn.Sequential(
             nn.Conv2d(
@@ -96,14 +96,6 @@ class ICATBlock(nn.Module):
         )
         
     def forward(self, x, y, xm, ym):
-        H, W = x.shape[-2:]
-        pad_r = (self.window_size - W % self.window_size) % self.window_size
-        pad_b = (self.window_size - H % self.window_size) % self.window_size
-        x = F.pad(x, (0, pad_r, 0, pad_b))
-        y = F.pad(y, (0, pad_r, 0, pad_b))
-        xm = F.pad(xm, (0, pad_r, 0, pad_b))
-        ym = F.pad(ym, (0, pad_r, 0, pad_b))
-
         for i in range(y.shape[1]):
             merge = torch.cat(
                 [
