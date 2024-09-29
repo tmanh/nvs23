@@ -151,6 +151,21 @@ class BaseModule(nn.Module):
         out = self.decode(shape, refined_fs)
         raw = self.decode(shape, fs).view(N, V, 3, ps, ps)
         return out, raw
+    
+    def forward_stage1(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
+        shape = colors.shape[-2:]
+        fs = self.encoder(colors)
+
+        N, V, _, H, W = fs.shape
+        fs = fs[:, :, :96].view(N * V, 96, H, W)
+        fs = fs[
+            ...,
+            py // 4:py // 4 + ps // 4,
+            px // 4:px // 4 + ps // 4
+        ]
+
+        raw = self.decode(shape, fs)
+        return raw
 
     def decode(self, shape, refined_fs):
         out = self.up1(refined_fs)
