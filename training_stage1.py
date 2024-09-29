@@ -179,7 +179,7 @@ def main(args) -> None:
             dst_cs = dst_cs[..., py:py+ps, px:px+ps]
             src_cs = src_cs[..., py:py+ps, px:px+ps]
 
-            loss = l1(raw, src_cs) + cobi(raw.view(N * V, -1, ps, ps), src_cs[:, 0])
+            loss = l1(raw, src_cs) + cobi(raw.view(N * V, -1, ps, ps), src_cs)
 
             opt.zero_grad()
             accelerator.backward(loss)
