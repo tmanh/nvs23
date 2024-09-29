@@ -127,11 +127,11 @@ class BaseModule(nn.Module):
             prj_fs, prj_depths
         )
 
-        N, V, C, H, W = fs.shape
+        N, V, _, H, W = fs.shape
         fs = fs[:, :, :96].view(N * V, 96, H, W)
 
         out = self.decode(shape, refined_fs)
-        raw = self.decode(shape, fs).view(N, V, 3, H, W)
+        raw = self.decode(shape, fs).view(N, V, 3, *colors.shape[-2:])
         return out, raw
 
     def decode(self, shape, refined_fs):
