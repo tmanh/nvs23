@@ -53,7 +53,7 @@ class Fusion(nn.Module):
 
         self.up1 = nn.Sequential(
             nn.GELU(),
-            nn.Conv2d(768 * 2, 384, 3, 1, 1)
+            nn.Conv2d(768, 384, 3, 1, 1)
         )
         self.up2 = nn.Sequential(
             nn.GELU(),
@@ -99,16 +99,16 @@ class Fusion(nn.Module):
         mfs3 = self.enc3(fs3.view(B, V, -1, *ds3.shape[-2:]), ds3)
         mfs4 = self.enc4(fs4.view(B, V, -1, *ds4.shape[-2:]), ds4)
 
-        mfs3 = self.up1(torch.cat([mfs4, fs4], dim=1))
-        mfs3 = F.interpolate(mfs3, size=fs3.shape[-2:], mode='nearest')
+        ufs3 = self.up1(mfs4)
+        ufs3 = F.interpolate(ufs3, size=fs3.shape[-2:], mode='nearest')
 
-        mfs2 = self.up2(torch.cat([mfs3, fs3], dim=1))
-        mfs2 = F.interpolate(mfs2, size=fs2.shape[-2:], mode='nearest')
+        ufs2 = self.up2(torch.cat([mfs3, ufs3], dim=1))
+        ufs2 = F.interpolate(ufs2, size=fs2.shape[-2:], mode='nearest')
 
-        mfs1 = self.up3(torch.cat([mfs2, fs2], dim=1))
-        mfs1 = F.interpolate(mfs1, size=fs1.shape[-2:], mode='nearest')
+        ufs1 = self.up3(torch.cat([mfs2, ufs2], dim=1))
+        ufs1 = F.interpolate(ufs1, size=fs1.shape[-2:], mode='nearest')
 
-        out = fs1 + self.out(torch.cat([mfs1, fs1], dim=1))
+        out = mfs1 + self.out(torch.cat([mfs1, ufs1], dim=1))
 
         return out
 
