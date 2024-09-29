@@ -176,6 +176,8 @@ def main(args) -> None:
                 dst_Rts, torch.inverse(dst_Rts), 
                 py=py, px=px, ps=ps
             )
+            dst_cs = dst_cs[..., py:py+ps, px:px+ps]
+            src_cs = src_cs[..., py:py+ps, px:px+ps]
 
             loss = l1(raw, src_cs)
             loss += cobi(pred, dst_cs[:, 0])
