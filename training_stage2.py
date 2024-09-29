@@ -178,8 +178,6 @@ def main(args) -> None:
             )
             dst_cs = dst_cs[..., py:py+ps, px:px+ps]
             src_cs = src_cs[..., py:py+ps, px:px+ps]
-            print(raw.shape, src_cs.shape, pred.shape, dst_cs.shape)
-            exit()
             loss = l1(raw, src_cs)
             loss += cobi(pred, dst_cs[:, 0])
 
