@@ -9,7 +9,7 @@ class FusionBlock(nn.Module):
         w1 = window_size
 
         self.cross = ICATBlock(in_dim, (in_dim + 1) * 2, 1, window_size=w1, num_heads=8)
-        self.spatial = LOSABlock(in_dim, window_size=w1)
+        self.spatial = nn.Conv2d(in_dim, in_dim, 3, 1, 1)
 
     def forward(self, vf, df):
         x = vf[:, 0]
@@ -18,7 +18,7 @@ class FusionBlock(nn.Module):
         ym = df[:, 1:]
 
         x = self.cross(x, y, xm, ym)
-        x = self.spatial(x)
+        x = x + self.spatial(x)
 
         return x
 

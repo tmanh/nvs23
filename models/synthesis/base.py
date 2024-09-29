@@ -163,7 +163,6 @@ class BaseModule(nn.Module):
             py // 4:py // 4 + ps // 4,
             px // 4:px // 4 + ps // 4
         ]
-        print(fs.shape)
 
         return self.decode(ps, fs)
 
