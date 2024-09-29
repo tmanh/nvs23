@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as functional
 
 from models.layers.fuse import Fusion
 from models.synthesis.base import BaseModule

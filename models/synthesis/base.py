@@ -122,6 +122,19 @@ class BaseModule(nn.Module):
         )
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
+        
+        if ps > 0:
+            prj_depths = prj_depths[
+                ...,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            prj_fs = prj_fs[
+                ...,
+                py // 4:py // 4 + ps // 4,
+                px // 4:px // 4 + ps // 4
+            ]
+            shape = (ps, ps)
 
         refined_fs = self.merge_net(
             prj_fs, prj_depths
@@ -129,6 +142,11 @@ class BaseModule(nn.Module):
 
         N, V, C, H, W = fs.shape
         fs = fs[:, :, :96].view(N * V, 96, H, W)
+        fs = fs[
+            ...,
+            py // 4:py // 4 + ps // 4,
+            px // 4:px // 4 + ps // 4
+        ]
 
         out = self.decode(shape, refined_fs)
         raw = self.decode(shape, fs).view(N, V, 3, ps, ps)
