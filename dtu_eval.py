@@ -81,7 +81,7 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0020000.pt')
+    sd = torch.load('exp/checkpoints/0020000.pt', weights_only=False)
     model.load_state_dict(sd)
 
     H, W = 512, 384
@@ -141,18 +141,6 @@ def main(args):
             dst_RTinvs,
             visualize=True,
         )
-        # syn, warped = model.forward_train(
-        #     depths,
-        #     colors,
-        #     K,
-            
-        #     src_RTs,
-        #     src_RTinvs,
-            
-        #     dst_RTs, 
-        #     dst_RTinvs,
-        #     ps=256, py=60, px=60
-        # )
 
     out = F.interpolate(
         acolors[:, 0].view(1, 3, oH, oW),
