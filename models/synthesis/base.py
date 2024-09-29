@@ -148,8 +148,8 @@ class BaseModule(nn.Module):
             px // 4:px // 4 + ps // 4
         ]
 
-        out = self.decode(shape, refined_fs)
-        raw = self.decode(shape, fs).view(N, V, 3, ps, ps)
+        out = self.decode(ps, refined_fs)
+        raw = self.decode(ps, fs).view(N, V, 3, ps, ps)
         return out, raw
     
     def forward_stage1(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
@@ -165,8 +165,7 @@ class BaseModule(nn.Module):
         ]
         print(fs.shape)
 
-        raw = self.decode(shape, fs)
-        return raw
+        return self.decode(ps, fs)
 
     def decode(self, shape, refined_fs):
         out = self.up1(refined_fs)
