@@ -208,50 +208,6 @@ def main(args) -> None:
                     ckpt_path = f"{ckpt_dir}/{global_step:07d}.pt"
                     torch.save(checkpoint, ckpt_path)
 
-            # Evaluate model:
-            if global_step % cfg.train.val_every == 0:
-                renderer.to_eval()
-                val_loss = []
-                val_lpips = []
-                val_psnr = []
-                val_pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch",
-                                total=len(val_loader), leave=False, desc="Validation")
-                # TODO: use accelerator.gather_for_metrics for more precise metric calculation?
-                for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in val_loader:
-                    dst_cs = dst_cs.float().to(device)
-                    src_cs = src_cs.float().to(device)
-                    src_ds = src_ds.float().to(device)
-                    K = K.float().to(device)
-                    dst_Rts = dst_Rts.float().to(device)
-                    src_Rts = src_Rts.float().to(device)
-
-                    # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
-                    with torch.no_grad():
-                        # forward
-                        val_pred, _ = renderer(
-                            src_ds, src_cs,
-                            K,
-                            src_Rts, torch.inverse(src_Rts),
-                            dst_Rts, torch.inverse(dst_Rts)
-                        )
-                        # compute metrics (loss, lpips, psnr)
-                        val_loss.append(F.mse_loss(input=val_pred, target=dst_cs[:, 0], reduction="sum").item())
-                        val_lpips.append(lpips_model(val_pred, dst_cs[:, 0], normalize=True).mean().item())
-                        val_psnr.append(calculate_psnr_pt(val_pred, dst_cs[:, 0], crop_border=0).mean().item())
-                    val_pbar.update(1)
-                val_pbar.close()
-                avg_val_loss = accelerator.gather(torch.tensor(val_loss, device=device).unsqueeze(0)).mean().item()
-                avg_val_lpips = accelerator.gather(torch.tensor(val_lpips, device=device).unsqueeze(0)).mean().item()
-                avg_val_psnr = accelerator.gather(torch.tensor(val_psnr, device=device).unsqueeze(0)).mean().item()
-                if accelerator.is_local_main_process:
-                    for tag, val in [
-                        ("val/loss", avg_val_loss),
-                        ("val/lpips", avg_val_lpips),
-                        ("val/psnr", avg_val_psnr)
-                    ]:
-                        writer.add_scalar(tag, val, global_step)
-                renderer.to_train()
-            
             accelerator.wait_for_everyone()
 
             if global_step == max_steps:
