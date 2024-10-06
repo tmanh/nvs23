@@ -89,13 +89,13 @@ class BaseModule(nn.Module):
         if ps > 0:
             prj_depths = prj_depths[
                 :, :, :,
-                py // 4:py // 4 + ps // 4,
-                px // 4:px // 4 + ps // 4
+                py:py + ps,
+                px:px + ps
             ]
             prj_fs = prj_fs[
                 :, :, :,
-                py // 4:py // 4 + ps // 4,
-                px // 4:px // 4 + ps // 4
+                py:py + ps,
+                px:px + ps
             ]
             shape = (ps, ps)
 
@@ -126,15 +126,14 @@ class BaseModule(nn.Module):
         if ps > 0:
             prj_depths = prj_depths[
                 ...,
-                py // 4:py // 4 + ps // 4,
-                px // 4:px // 4 + ps // 4
+                py:py + ps,
+                px:px + ps
             ]
             prj_fs = prj_fs[
                 ...,
-                py // 4:py // 4 + ps // 4,
-                px // 4:px // 4 + ps // 4
+                py:py + ps,
+                px:px + ps
             ]
-            shape = (ps, ps)
 
         refined_fs = self.merge_net(
             prj_fs, prj_depths
@@ -144,8 +143,8 @@ class BaseModule(nn.Module):
         fs = fs[:, :, :96].view(N * V, 96, H, W)
         fs = fs[
             ...,
-            py // 4:py // 4 + ps // 4,
-            px // 4:px // 4 + ps // 4
+            py:py + ps,
+            px:px + ps
         ]
 
         out = self.decode(ps, refined_fs)
@@ -160,8 +159,8 @@ class BaseModule(nn.Module):
         fs = fs[:, :, :96].view(N * V, 96, H, W)
         fs = fs[
             ...,
-            py // 4:py // 4 + ps // 4,
-            px // 4:px // 4 + ps // 4
+            py:py + ps,
+            px:px + ps
         ]
 
         return self.decode(ps, fs)
