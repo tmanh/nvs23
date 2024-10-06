@@ -41,8 +41,8 @@ class SwinColorFeats(nn.Module):
         )
 
     def forward(self, colors):
-        self.mean.to(colors)
-        self.std.to(colors)
+        self.mean.to(colors.device)
+        self.std.to(colors.device)
 
         colors = (colors - self.mean) / self.std
 
