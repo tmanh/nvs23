@@ -25,21 +25,22 @@ class SwinColorFeats(nn.Module):
         self.pre_conv = nn.ModuleList(
             [
                 nn.Sequential(
-                    nn.GELU(),
+                    nn.ReLU(inplace=True),
                     nn.Conv2d(512, 32, 3, 1, 1),
                 ),
                 nn.Sequential(
-                    nn.GELU(),
+                    nn.ReLU(inplace=True),
                     nn.Conv2d(512, 32, 3, 1, 1),
                 ),
                 nn.Sequential(
-                    nn.GELU(),
+                    nn.ReLU(inplace=True),
                     nn.Conv2d(256, 32, 3, 1, 1),
                 ),
                 nn.Sequential(
-                    nn.GELU(),
+                    nn.ReLU(inplace=True),
                     nn.Conv2d(128, 32, 3, 1, 1),
                 ),
+                None
             ]
         )
 
@@ -59,7 +60,7 @@ class SwinColorFeats(nn.Module):
                 if i in self.selected_layers:
                     feats.append(x)
 
-        hf, wf = feats[0].shape[-2:]
+        hf, wf = colors.shape[-2:]
         merge = []
         for i, f in enumerate(feats[::-1]):
             if self.pre_conv[i] is not None:
