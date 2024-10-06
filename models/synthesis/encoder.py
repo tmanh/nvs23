@@ -26,17 +26,20 @@ class SwinColorFeats(nn.Module):
             [
                 nn.Sequential(
                     nn.GELU(),
-                    nn.Conv2d(768, 64, 3, 1, 1),
+                    nn.Conv2d(512, 32, 3, 1, 1),
                 ),
                 nn.Sequential(
                     nn.GELU(),
-                    nn.Conv2d(384, 32, 3, 1, 1),
+                    nn.Conv2d(512, 32, 3, 1, 1),
                 ),
                 nn.Sequential(
                     nn.GELU(),
-                    nn.Conv2d(192, 64, 3, 1, 1),
+                    nn.Conv2d(256, 32, 3, 1, 1),
                 ),
-                None
+                nn.Sequential(
+                    nn.GELU(),
+                    nn.Conv2d(128, 32, 3, 1, 1),
+                ),
             ]
         )
 
@@ -55,10 +58,6 @@ class SwinColorFeats(nn.Module):
                 x = layer(x)
                 if i in self.selected_layers:
                     feats.append(x)
-            for f in feats:
-                print(f.shape)
-            exit()
-        feats = self.backbone()
 
         hf, wf = feats[0].shape[-2:]
         merge = []
@@ -67,7 +66,9 @@ class SwinColorFeats(nn.Module):
                 f = self.pre_conv[i](f)
                 f = F.interpolate(f, size=(hf, wf), mode='nearest')
             merge.append(f)
-        
+        for f in feats:
+            print(merge.shape)
+        exit()
         return torch.cat(merge, dim=1).view(B, V, -1, hf, wf)
     
     def freeze(self):
