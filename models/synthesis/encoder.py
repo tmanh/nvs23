@@ -48,7 +48,7 @@ class SwinColorFeats(nn.Module):
 
         B, V, C, H, W = colors.shape
         with torch.no_grad():
-            features = []
+            feats = []
     
             x = colors.view(-1, C, H, W)
             for i, layer in enumerate(self.backbone):
