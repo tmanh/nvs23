@@ -74,5 +74,3 @@ class SwinColorFeats(nn.Module):
         for module in self.backbone.modules():
             if isinstance(module, (nn.BatchNorm2d, nn.LayerNorm)):
                 module.eval()
-        self.std.eval()
-        self.mean.eval()
