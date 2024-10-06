@@ -67,10 +67,11 @@ class SwinColorFeats(nn.Module):
                 f = self.pre_conv[i](f)
                 f = F.interpolate(f, size=(hf, wf), mode='nearest')
             merge.append(f)
-        for f in feats:
-            print(merge.shape)
+
+        merge = torch.cat(merge, dim=1).view(B, V, -1, hf, wf)
+        print(merge.shape)
         exit()
-        return torch.cat(merge, dim=1).view(B, V, -1, hf, wf)
+        return merge
     
     def freeze(self):
         self.backbone.eval()
