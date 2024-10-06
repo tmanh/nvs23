@@ -41,20 +41,23 @@ class SwinColorFeats(nn.Module):
         )
 
     def forward(self, colors):
+        self.mean.to(colors)
+        self.std.to(colors)
+
         colors = (colors - self.mean) / self.std
 
         B, V, C, H, W = colors.shape
         with torch.no_grad():
             features = []
     
-        x = colors.view(-1, C, H, W)
-        for i, layer in enumerate(self.backbone):
-            x = layer(x)
-            if i in self.selected_layers:
-                feats.append(x)
-        for f in feats:
-            print(f.shape)
-        exit()
+            x = colors.view(-1, C, H, W)
+            for i, layer in enumerate(self.backbone):
+                x = layer(x)
+                if i in self.selected_layers:
+                    feats.append(x)
+            for f in feats:
+                print(f.shape)
+            exit()
         feats = self.backbone()
 
         hf, wf = feats[0].shape[-2:]
