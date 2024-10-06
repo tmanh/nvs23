@@ -29,7 +29,7 @@ class Fusion(nn.Module):
 
         self.prj = nn.Sequential(
             nn.GELU(),
-            nn.Conv2d(256, 96, 3, 1, 1)
+            nn.Conv2d(192, 96, 3, 1, 1)
         )
 
         ########### STAGE BASE ATTENTION
