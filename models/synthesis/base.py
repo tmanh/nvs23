@@ -156,12 +156,14 @@ class BaseModule(nn.Module):
 
         N, V, _, H, W = fs.shape
         fs = fs[:, :, :96].view(N * V, 96, H, W)
-        if ps > 0:
+        if ps != -1:
             fs = fs[
                 ...,
                 py:py + ps,
                 px:px + ps
             ]
+        else:
+            ps = (H, W)
 
         return self.decode(ps, fs)
 
