@@ -142,6 +142,22 @@ def main(args):
             visualize=True,
         )
 
+        stage1 = model.forward_stage1(
+            depths,
+            colors,
+            K,
+            
+            src_RTs,
+            src_RTinvs,
+            
+            dst_RTs, 
+            dst_RTinvs,
+            visualize=True,
+        )
+
+        print(stage1.shape)
+        exit()
+
     out = F.interpolate(
         acolors[:, 0].view(1, 3, oH, oW),
         size=(H, W),

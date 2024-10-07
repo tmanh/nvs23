@@ -152,7 +152,6 @@ class BaseModule(nn.Module):
         return out, raw
     
     def forward_stage1(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
-        shape = colors.shape[-2:]
         fs = self.encoder(colors)
 
         N, V, _, H, W = fs.shape
