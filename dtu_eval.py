@@ -152,7 +152,6 @@ def main(args):
             
             dst_RTs, 
             dst_RTinvs,
-            visualize=True,
         )
 
         print(stage1.shape)
