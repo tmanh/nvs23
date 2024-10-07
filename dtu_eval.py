@@ -154,9 +154,6 @@ def main(args):
             dst_RTinvs,
         )
 
-        print(stage1.shape)
-        exit()
-
     out = F.interpolate(
         acolors[:, 0].view(1, 3, oH, oW),
         size=(H, W),
@@ -177,6 +174,10 @@ def main(args):
     for k in range(warped.shape[0]):
         out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
         cv2.imwrite(f'output/out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+
+    for k in range(stage1.shape[0]):
+        out = stage1[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+        cv2.imwrite(f'output/stage1_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
 
 if __name__ == "__main__":
