@@ -22,7 +22,7 @@ class SwinColorFeats(nn.Module):
             for f in feats:
                 _, c, h, w = f.shape
                 reshaped_feats.append(f.view(B, V, c, h, w))
-        return feats
+        return reshaped_feats
     
     def freeze(self):
         self.backbone.eval()
