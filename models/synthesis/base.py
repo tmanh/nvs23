@@ -1,5 +1,6 @@
 import numpy as np
 
+import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -93,10 +94,14 @@ class BaseModule(nn.Module):
         fs = self.encoder(colors)
 
         prj_fs, prj_depths = self.project(
-            fs[0], depths, ori_shape,
-            self.compute_K(K, ori_shape, fs[0].shape[-2:]),
+            colors, depths, ori_shape,
+            self.compute_K(K, ori_shape, colors.shape[-2:]),
             src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
         )
+        tmp = prj_fs[0, 0].permute(1, 2, 0)
+        tmp = ((tmp + 1.0) / 2.0 * 255.0).clamp(0, 255).detach().cpu().numpy()
+        
+        cv2.imwrite('tmp.png', tmp)
         exit()
 
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
