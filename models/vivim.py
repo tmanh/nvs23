@@ -263,20 +263,16 @@ class Vivim(nn.Module):
         self.spatial_dims = spatial_dims
 
         backbone = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b3-finetuned-ade-512-512")
-        self.encoder = mamba_block(backbone, in_chans, dims=feat_size,
-                              )
+        self.encoder = mamba_block(backbone, in_chans, dims=feat_size)
         self.decoder = backbone.decode_head
-        # self.decoder.classifier = nn.Sequential()
 
         self.out = nn.Conv2d(768, out_chans, kernel_size=1)
-        # self.conv_proj = ProjectionHead(dim_in=hidden_size)
+
         self.with_edge = with_edge
         if with_edge:
             self.edgeocr_cls_head = nn.Conv2d(
                 64, 1, kernel_size=1, stride=1, padding=0,
                 bias=True)
-
-
 
     def proj_feat(self, x):
         new_view = [x.size(0)] + self.proj_view_shape
@@ -285,7 +281,6 @@ class Vivim(nn.Module):
         return x
 
     def decode(self, encoder_hidden_states, bz, nf):
-    # def forward(self, encoder_hidden_states: torch.FloatTensor) -> torch.Tensor:
         batch_size = encoder_hidden_states[-1].shape[0]
 
         all_hidden_states = ()
@@ -321,19 +316,19 @@ class Vivim(nn.Module):
     def forward(self, x_in):
         bz, nf, nc, h, w = x_in.shape
         outs = self.encoder(x_in)
+        print(outs.shape)
         logits = self.decode(outs,bz,nf)
-        # print(last_feat.shape)
-
-        # print(logits.shape)
+        print(logits.shape)
+        exit()
         upsampled_logits = nn.functional.interpolate(
-                logits, size=(h,w), mode="bilinear", align_corners=False
-            )
+            logits, size=(h,w), mode="bilinear", align_corners=False
+        )
 
         if self.with_edge:
             edge = self.edgeocr_cls_head(outs[0])
             edge = nn.functional.interpolate(
-                    edge, size=(h,w), mode="bilinear", align_corners=False
-                )
+                edge, size=(h,w), mode="bilinear", align_corners=False
+            )
             return upsampled_logits, edge
         else:
             return upsampled_logits
