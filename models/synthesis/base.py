@@ -94,7 +94,7 @@ class BaseModule(nn.Module):
 
         prj_fs, prj_depths = self.project(
             fs[0], depths, ori_shape,
-            self.compute_K(K, ori_shape, fs[0].shape),
+            self.compute_K(K, ori_shape, fs[0].shape[-2:]),
             src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
         )
         exit()
