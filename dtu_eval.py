@@ -77,8 +77,8 @@ class ProposedModel(nn.Module):
 def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    v = Vivim()
-    v(torch.zeros((1, 4, 3, 300, 300)))
+    v = Vivim().to(device)
+    v(torch.zeros((1, 4, 3, 300, 300)).to(device))
     exit()
 
     if torch.cuda.is_available():
