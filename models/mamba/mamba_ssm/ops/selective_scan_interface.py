@@ -157,13 +157,12 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(
-        ctx=None, xz=None, conv1d_weight=None, conv1d_bias=None, x_proj_weight=None, delta_proj_weight=None, *, device_type: str,
+        ctx, xz, conv1d_weight=None, conv1d_bias=None, x_proj_weight=None, delta_proj_weight=None,
         A=None, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
         C_proj_bias=None, delta_softplus=True, checkpoint_lvl=1):
         """
              xz: (batch, dim, seqlen)
         """
-        device_type = xz.device.type  # Can be 'cuda', 'cpu', etc.
 
         assert checkpoint_lvl in [0, 1]
         L = xz.shape[-1]
@@ -629,13 +628,11 @@ def bimamba_inner_fn(
 
 def mamba_inner_fn_no_out_proj(
     xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
-    device_type: str,
-    A, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
+    A=None, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
     C_proj_bias=None, delta_softplus=True
 ):
     return MambaInnerFnNoOutProj.apply(
         xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
-        device_type,
         A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus
     )
 
