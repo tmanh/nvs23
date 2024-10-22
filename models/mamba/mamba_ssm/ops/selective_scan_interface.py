@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn.functional as F
-from torch.cuda.amp import custom_bwd, custom_fwd
+from torch.amp import custom_bwd, custom_fwd
 
 from einops import rearrange, repeat
 
