@@ -36,7 +36,6 @@ class Screen_PtsManipulator(nn.Module):
 
         self.splatter = RasterizePointsXYsBlending(
             radius=opt.model.radius,
-            size=(H, W),
             points_per_pixel=opt.model.pp_pixel,
             opts=opt,
         )
