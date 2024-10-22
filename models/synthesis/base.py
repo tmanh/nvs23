@@ -236,7 +236,6 @@ class BaseModule(nn.Module):
         )
 
         feats = feats.contiguous().view(bs, nv, c, -1)
-        colors = colors.contiguous().view(bs, nv, 3, -1)
         depths = depths.contiguous().view(bs, nv, 1, -1)
 
         prj_feats, prj_depths = self.view_render(
