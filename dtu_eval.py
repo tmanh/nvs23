@@ -78,7 +78,7 @@ def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     v = Vivim()
-    v(torch.tensor((1, 4, 3, 300, 300)))
+    v(torch.zeros((1, 4, 3, 300, 300)))
     exit()
 
     if torch.cuda.is_available():

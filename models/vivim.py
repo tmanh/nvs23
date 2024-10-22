@@ -312,7 +312,6 @@ class Vivim(nn.Module):
 
         return logits        
 
-
     def forward(self, x_in):
         bz, nf, nc, h, w = x_in.shape
         outs = self.encoder(x_in)
