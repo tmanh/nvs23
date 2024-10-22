@@ -157,6 +157,7 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+                device_type: str,
                 A, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
                 C_proj_bias=None, delta_softplus=True, checkpoint_lvl=1):
         """
@@ -626,11 +627,15 @@ def bimamba_inner_fn(
 
 def mamba_inner_fn_no_out_proj(
     xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+    device_type: str,
     A, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
     C_proj_bias=None, delta_softplus=True
 ):
-    return MambaInnerFnNoOutProj.apply(xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
-                              A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus)
+    return MambaInnerFnNoOutProj.apply(
+        xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+        device_type,
+        A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus
+    )
 
 
 def mamba_inner_ref(

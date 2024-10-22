@@ -220,6 +220,7 @@ class Mamba(nn.Module):
                     self.conv1d.bias,
                     self.x_proj.weight,
                     self.dt_proj.weight,
+                    str(self.dt_proj.device),
                     A,
                     None,  # input-dependent B
                     None,  # input-dependent C
@@ -233,6 +234,7 @@ class Mamba(nn.Module):
                     self.conv1d_b.bias,
                     self.x_proj_b.weight,
                     self.dt_proj_b.weight,
+                    str(self.dt_proj_b.device),
                     A_b,
                     None,
                     None,
@@ -251,6 +253,7 @@ class Mamba(nn.Module):
                     self.conv1d_s.bias,
                     self.x_proj_s.weight,
                     self.dt_proj_s.weight,
+                    str(self.dt_proj_s.device),
                     A_s,
                     None,
                     None,
@@ -270,6 +273,7 @@ class Mamba(nn.Module):
                     self.conv1d.bias,
                     self.x_proj.weight,
                     self.dt_proj.weight,
+                    str(self.dt_proj.device),
                     A,
                     None,  # input-dependent B
                     None,  # input-dependent C
@@ -283,6 +287,7 @@ class Mamba(nn.Module):
                     self.conv1d_b.bias,
                     self.x_proj_b.weight,
                     self.dt_proj_b.weight,
+                    str(self.dt_proj_b.device),
                     A_b,
                     None,
                     None,
