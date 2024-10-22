@@ -1,8 +1,9 @@
+
 # Copyright (c) 2023, Tri Dao, Albert Gu.
 
 import torch
 import torch.nn.functional as F
-from torch.amp import custom_bwd, custom_fwd
+from torch.cuda.amp import custom_bwd, custom_fwd
 
 from einops import rearrange, repeat
 
@@ -156,14 +157,12 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
 
     @staticmethod
     @custom_fwd
-    def forward(
-        ctx, xz, conv1d_weight=None, conv1d_bias=None, x_proj_weight=None, delta_proj_weight=None,
-        A=None, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
-        C_proj_bias=None, delta_softplus=True, checkpoint_lvl=1):
+    def forward(ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+                A, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
+                C_proj_bias=None, delta_softplus=True, checkpoint_lvl=1):
         """
              xz: (batch, dim, seqlen)
         """
-
         assert checkpoint_lvl in [0, 1]
         L = xz.shape[-1]
         delta_rank = delta_proj_weight.shape[1]
@@ -176,7 +175,7 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
         conv1d_weight = rearrange(conv1d_weight, "d 1 w -> d w")
         x, z = xz.chunk(2, dim=1)
         conv1d_bias = conv1d_bias.contiguous() if conv1d_bias is not None else None
-        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias,None, True)
         # We're being very careful here about the layout, to avoid extra transposes.
         # We want delta to have d as the slowest moving dimension
         # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
@@ -238,7 +237,7 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
         if dout.stride(-1) != 1:
             dout = dout.contiguous()
         if ctx.checkpoint_lvl == 1:
-            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias,None, True)
             delta = rearrange(delta_proj_weight @ x_dbl[:, :delta_rank].t(),
                               "d (b l) -> b d l", l = L)
         # The kernel supports passing in a pre-allocated dz (e.g., in case we want to fuse the
@@ -281,7 +280,7 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
         # The kernel supports passing in a pre-allocated dx (e.g., in case we want to fuse the
         # backward of conv1d with the backward of chunk).
         dx, dconv1d_weight, dconv1d_bias = causal_conv1d_cuda.causal_conv1d_bwd(
-            x, conv1d_weight, conv1d_bias, dconv1d_out, dx, True
+            x, conv1d_weight, conv1d_bias, dconv1d_out, None, dx, True
         )
         dconv1d_bias = dconv1d_bias if conv1d_bias is not None else None
         dconv1d_weight = rearrange(dconv1d_weight, "d w -> d 1 w")
@@ -317,7 +316,7 @@ class MambaInnerFn(torch.autograd.Function):
         conv1d_weight = rearrange(conv1d_weight, "d 1 w -> d w")
         x, z = xz.chunk(2, dim=1)
         conv1d_bias = conv1d_bias.contiguous() if conv1d_bias is not None else None
-        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, None, True)
         # We're being very careful here about the layout, to avoid extra transposes.
         # We want delta to have d as the slowest moving dimension
         # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
@@ -379,7 +378,7 @@ class MambaInnerFn(torch.autograd.Function):
         if dout.stride(-1) != 1:
             dout = dout.contiguous()
         if ctx.checkpoint_lvl == 1:
-            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, None, True)
             delta = rearrange(delta_proj_weight @ x_dbl[:, :delta_rank].t(),
                               "d (b l) -> b d l", l = L)
         # The kernel supports passing in a pre-allocated dz (e.g., in case we want to fuse the
@@ -425,7 +424,7 @@ class MambaInnerFn(torch.autograd.Function):
         # The kernel supports passing in a pre-allocated dx (e.g., in case we want to fuse the
         # backward of conv1d with the backward of chunk).
         dx, dconv1d_weight, dconv1d_bias = causal_conv1d_cuda.causal_conv1d_bwd(
-            x, conv1d_weight, conv1d_bias, dconv1d_out, dx, True
+            x, conv1d_weight, conv1d_bias, dconv1d_out, None, dx, True
         )
         dconv1d_bias = dconv1d_bias if conv1d_bias is not None else None
         dconv1d_weight = rearrange(dconv1d_weight, "d w -> d 1 w")
@@ -462,7 +461,7 @@ class BiMambaInnerFn(torch.autograd.Function):
         conv1d_weight = rearrange(conv1d_weight, "d 1 w -> d w")
         x, z = xz.chunk(2, dim=1)
         conv1d_bias = conv1d_bias.contiguous() if conv1d_bias is not None else None
-        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+        conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias,None, True)
         # We're being very careful here about the layout, to avoid extra transposes.
         # We want delta to have d as the slowest moving dimension
         # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
@@ -531,7 +530,7 @@ class BiMambaInnerFn(torch.autograd.Function):
         if dout.stride(-1) != 1:
             dout = dout.contiguous()
         if ctx.checkpoint_lvl == 1:
-            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, True)
+            conv1d_out = causal_conv1d_cuda.causal_conv1d_fwd(x, conv1d_weight, conv1d_bias, None, True)
             delta = rearrange(delta_proj_weight @ x_dbl[:, :delta_rank].t(),
                               "d (b l) -> b d l", l = L)
         # The kernel supports passing in a pre-allocated dz (e.g., in case we want to fuse the
@@ -594,7 +593,7 @@ class BiMambaInnerFn(torch.autograd.Function):
         # The kernel supports passing in a pre-allocated dx (e.g., in case we want to fuse the
         # backward of conv1d with the backward of chunk).
         dx, dconv1d_weight, dconv1d_bias = causal_conv1d_cuda.causal_conv1d_bwd(
-            x, conv1d_weight, conv1d_bias, dconv1d_out, dx, True
+            x, conv1d_weight, conv1d_bias, dconv1d_out, None, dx, True
         )
         dconv1d_bias = dconv1d_bias if conv1d_bias is not None else None
         dconv1d_weight = rearrange(dconv1d_weight, "d w -> d 1 w")
@@ -628,13 +627,11 @@ def bimamba_inner_fn(
 
 def mamba_inner_fn_no_out_proj(
     xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
-    A=None, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
+    A, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
     C_proj_bias=None, delta_softplus=True
 ):
-    return MambaInnerFnNoOutProj.apply(
-        xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
-        A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus
-    )
+    return MambaInnerFnNoOutProj.apply(xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight,
+                              A, B, C, D, delta_bias, B_proj_bias, C_proj_bias, delta_softplus)
 
 
 def mamba_inner_ref(
