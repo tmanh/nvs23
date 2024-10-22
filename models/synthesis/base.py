@@ -91,13 +91,17 @@ class BaseModule(nn.Module):
     def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False, py=-1, px=-1, ps=-1):
         ori_shape = colors.shape[-2:]
 
-        fs = self.encoder(colors)
+        feats = self.encoder(colors)
 
-        prj_fs, prj_depths = self.project(
-            colors, depths, ori_shape,
-            self.compute_K(K, ori_shape, colors.shape[-2:]),
-            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
-        )
+        with torch.no_grad():
+            for fs in feats:
+                prj_fs, prj_depths = self.project(
+                    fs, depths, ori_shape,
+                    self.compute_K(K, ori_shape, colors.shape[-2:]),
+                    src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
+                )
+                print(prj_fs.shape)
+        exit()
         tmp = prj_fs[0, 0].permute(1, 2, 0)
         tmp = ((tmp + 1.0) / 2.0 * 255.0).clamp(0, 255).detach().cpu().numpy()
         
