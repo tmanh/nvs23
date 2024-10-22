@@ -29,19 +29,17 @@ class RasterizePointsXYsBlending(nn.Module):
         in the new view
     """
 
-    def __init__(self, radius=1.5, size=256, points_per_pixel=8, opts=None):
+    def __init__(self, radius=1.5, points_per_pixel=8, opts=None):
         super().__init__()
 
         self.radius = radius
-        self.size = size
         self.points_per_pixel = points_per_pixel
         self.opts = opts
 
-    def forward(self, pts3D, src, depth=False):
+    def forward(self, pts3D, src, image_size, depth=False):
         if isinstance(pts3D, list):
             # if the pts3d has different point number for each point cloud
             bs = len(src)
-            image_size = self.size 
             for i in range(len(pts3D)):
                 pts3D[i][:, 1] = - pts3D[i][:, 1]
                 pts3D[i][:, 0] = - pts3D[i][:, 0] 
@@ -57,13 +55,11 @@ class RasterizePointsXYsBlending(nn.Module):
             bs = src.shape[0]
             if len(src.shape) > 3:
                 bs, c, w, _ = src.shape
-                image_size = w
 
                 pts3D = pts3D.permute(0, 2, 1)
                 src = src.unsqueeze(2).repeat(1, 1, w, 1, 1).view(bs, c, -1)
             else:
                 bs = src.shape[0]
-                image_size = self.size
 
             # Make sure these have been arranged in the same way
             assert pts3D.shape[2] == 3

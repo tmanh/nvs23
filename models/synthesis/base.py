@@ -75,14 +75,30 @@ class BaseModule(nn.Module):
     
     ##### FORWARD ###################################
 
+    def compute_K(self, K, ori_shape, fs_shape):
+        hc, wc = ori_shape
+        hf, wf = fs_shape
+
+        sh, sw = hf / hc, wf / wc
+        sK = K.clone()
+
+        sK[:, 0, :] = sw * sK[:, 0, :]
+        sK[:, 1, :] = sh * sK[:, 1, :]
+        
+        return sK
+
     def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False, py=-1, px=-1, ps=-1):
-        shape = colors.shape[-2:]
+        ori_shape = colors.shape[-2:]
+
         fs = self.encoder(colors)
 
-        prj_fs, warped, prj_depths = self.project(
-            colors, depths, fs, K,
-            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs, visualize
+        prj_fs, prj_depths = self.project(
+            fs[0], depths, ori_shape,
+            self.compute_K(K, ori_shape, fs[0].shape),
+            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
         )
+        exit()
+
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
         prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
         
@@ -200,27 +216,21 @@ class BaseModule(nn.Module):
             pointcloud = sampler.permute(0, 2, 1).contiguous()
             src_fs = src_fs.view(-1, *src_fs.shape[2:])
 
-            prj_fs, prj_ds = self.pts_transformer.splatter(pointcloud, src_fs, depth=True)
+            prj_fs, prj_ds = self.pts_transformer.splatter(
+                pointcloud, src_fs, image_size=(H, W), depth=True
+            )
 
             prj_depths.append(prj_ds)
             prj_feats.append(prj_fs)
 
         return torch.stack(prj_feats, 0), torch.stack(prj_depths, 0)
 
-    def project(self, colors, depths, feats, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+    def project(
+            self, feats, depths, ori_shape, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
+        ):
         bs, nv, c, hf, wf = feats.shape
-        _, _, _, hc, wc = colors.shape
+        hc, wc = ori_shape
 
-        sh, sw = hf / hc, wf / wc
-        sK = K.clone()
-
-        sK[:, 0, :] = sw * sK[:, 0, :]
-        sK[:, 1, :] = sh * sK[:, 1, :]
-
-        colors = F.interpolate(
-            colors.view(bs * nv, 3, hc, wc), size=(hf, wf),
-            mode='bilinear', align_corners=False, antialias=True
-        )
         depths = F.interpolate(
             depths.view(bs * nv, 1, hc, wc), size=(hf, wf), mode='nearest'
         )
@@ -231,22 +241,12 @@ class BaseModule(nn.Module):
 
         prj_feats, prj_depths = self.view_render(
             feats, depths,
-            sK, torch.inverse(sK),
+            K, torch.inverse(K),
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
             hf, wf
         )
 
-        if visualize:
-            prj_colors, prj_depths = self.view_render(
-                colors, depths,
-                sK, torch.inverse(sK),
-                src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
-                hf, wf
-            )
-        else:
-            prj_colors = None
-        
-        return prj_feats, prj_colors, prj_depths
+        return prj_feats, prj_depths
 
     ##### DATA AUGMENTATION ###################################
 
