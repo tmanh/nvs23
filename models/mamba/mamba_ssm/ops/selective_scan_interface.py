@@ -157,12 +157,14 @@ class MambaInnerFnNoOutProj(torch.autograd.Function):
     @staticmethod
     @custom_fwd
     def forward(
-        ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight, *, device_type: str,
+        ctx, xz, conv1d_weight, conv1d_bias, x_proj_weight, delta_proj_weight, #*, device_type: str,
         A=None, B=None, C=None, D=None, delta_bias=None, B_proj_bias=None,
         C_proj_bias=None, delta_softplus=True, checkpoint_lvl=1):
         """
              xz: (batch, dim, seqlen)
         """
+        device_type = xz.device.type  # Can be 'cuda', 'cpu', etc.
+
         assert checkpoint_lvl in [0, 1]
         L = xz.shape[-1]
         delta_rank = delta_proj_weight.shape[1]
