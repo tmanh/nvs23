@@ -18,6 +18,10 @@ class SwinColorFeats(nn.Module):
         B, V, C, H, W = colors.shape
         with torch.no_grad():
             feats = self.backbone(colors.view(B * V, C, H, W))
+            reshaped_feats = []
+            for f in feats:
+                _, c, h, w = f.shape
+                reshaped_feats.append(f.view(B, V, c, h, w))
         return feats
     
     def freeze(self):
