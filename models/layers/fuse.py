@@ -5,6 +5,22 @@ import torch.nn.functional as F
 from models.layers.vivim import MambaLayer
 
 
+class MultiViewAttentionFusion(nn.Module):
+    def __init__(self, input_channels, n_heads=8):
+        super(MultiViewAttentionFusion, self).__init__()
+        self.attention = nn.MultiheadAttention(embed_dim=input_channels, num_heads=n_heads)
+
+    def forward(self, x):
+        N, V, C, H, W = x.shape
+        print(x.shape)
+        exit()
+        x = x.view(N, V, C, -1).permute(1, 0, 3, 2)  # Reshape to (V, N, HW, C)
+        x = x.reshape(V, N * H * W, C)  # Flatten the spatial dimensions
+        attention_out, _ = self.attention(x, x, x)  # Self-attention over viewpoints
+        attention_out = attention_out.mean(dim=0).view(N, C, H, W)  # Merge viewpoints
+        return attention_out
+
+
 class Fusion(nn.Module):
     def create_fuse_layer(self, in_dim, out_dim):
         return nn.Sequential(
@@ -30,6 +46,8 @@ class Fusion(nn.Module):
         self.fuses = nn.ModuleList([self.fuse4, self.fuse3, self.fuse2])
         self.encs = nn.ModuleList([self.enc3, self.enc2, self.enc1])
 
+        self.view_fuse = MultiViewAttentionFusion(96)
+
     def forward(self, prjs):
         prev_prj = self.enc4(prjs[-1])  # N, C, V, H, W
         for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
@@ -52,4 +70,6 @@ class Fusion(nn.Module):
                 prj
             )
 
-        return prev_prj
+        fused = self.view_fuse(prev_prj)
+
+        return fused, prev_prj

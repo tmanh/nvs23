@@ -158,7 +158,6 @@ class MambaLayer(nn.Module):
         return out
 
 
-
 class mamba_block(nn.Module):
     """
     Args:
