@@ -31,7 +31,6 @@ class Fusion(nn.Module):
         self.encs = nn.ModuleList([self.enc3, self.enc2, self.enc1])
 
     def forward(self, prjs):
-        print(prjs[-1].shape)
         prev_prj = self.enc4(prjs[-1])  # N, C, V, H, W
         for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
             n, _, v, h, w = prev_prj.shape
@@ -52,10 +51,8 @@ class Fusion(nn.Module):
             prev_prj = enc(
                 prj
             )
-        print(prev_prj.shape)
-        exit()
 
-        return out
+        return prev_prj
 
     def split(self, prj_feats, B, V, H, W):
         fs1 = prj_feats[:, :, :96]

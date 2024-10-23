@@ -106,8 +106,6 @@ class Mlp(nn.Module):
         return x
 
 
-
-
 class MambaLayer(nn.Module):
     def __init__(self, dim, d_state = 16, d_conv = 4, expand = 2, mlp_ratio=4, drop=0., drop_path=0., act_layer=nn.GELU):
         super().__init__()
@@ -200,8 +198,6 @@ class mamba_block(nn.Module):
         hs = x
         for idx, x in enumerate(zip(self.downsample_layers.patch_embeddings, self.downsample_layers.block, self.downsample_layers.layer_norm, self.stages)):
             embedding_layer, block_layer, norm_layer, mam_stage = x
-            # first, obtain patch embeddings
-            # print(hs.shape)
             hs, height, width = embedding_layer(hs)
             
             # second, send embeddings through blocks
@@ -211,15 +207,12 @@ class mamba_block(nn.Module):
 
             # third, apply layer norm
             # hs = norm_layer(hs)
+            
             # fourth, optionally reshape back to (batch_size, num_channels, height, width)
             hs = hs.reshape(bz*nf, height, width, -1).permute(0, 3, 1, 2).contiguous()
-            # print(hs.shape)
             hs = hs.reshape(bz,nf,hs.shape[-3],hs.shape[-2],hs.shape[-1]).transpose(1,2)
-            # print(x.size())
-            print(hs.shape)
             hs = mam_stage(hs)
-            print(hs.shape)
-            exit()
+
             # print(x.shape)
             hs = hs.transpose(1,2)
             hs = hs.reshape(bz*nf,hs.shape[-3],hs.shape[-2],hs.shape[-1])

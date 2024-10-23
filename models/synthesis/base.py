@@ -111,6 +111,8 @@ class BaseModule(nn.Module):
         refined_fs = self.merge_net(
             prjs
         )
+        print(refined_fs.shape)
+        exit()
 
         out = self.up1(refined_fs)
         out = F.interpolate(out, scale_factor=2, mode='nearest')
