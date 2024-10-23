@@ -93,6 +93,7 @@ class BaseModule(nn.Module):
 
         with torch.no_grad():
             feats = self.encoder(colors)
+            
             prj_feats = []
             prj_depths = []
             for fs in feats:
@@ -103,12 +104,8 @@ class BaseModule(nn.Module):
                 )
                 prj_feats.append(prj_fs)
                 prj_depths.append(prj_pts)
-                print(prj_fs.shape, prj_pts.shape)
-        exit()
-        tmp = prj_fs[0, 0].permute(1, 2, 0)
-        tmp = ((tmp + 1.0) / 2.0 * 255.0).clamp(0, 255).detach().cpu().numpy()
         
-        cv2.imwrite('tmp.png', tmp)
+        print(prj_depths.shape)
         exit()
 
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)

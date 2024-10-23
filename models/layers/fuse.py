@@ -1,15 +1,13 @@
-from .osa import *
-from .cat import ICATBlock
+import torch.nn as nn
+
+from models.layers.vivim import MambaLayer
 
 
 class FusionBlock(nn.Module):
     def __init__(self, in_dim, window_size) -> None:
         super().__init__()
 
-        w1 = window_size
-
-        self.cross = ICATBlock(in_dim, (in_dim + 1) * 2, 1, window_size=w1, num_heads=8)
-        self.spatial = nn.Conv2d(in_dim, in_dim, 3, 1, 1)
+        self.cross = MambaLayer(in_dim)
 
     def forward(self, vf, df):
         x = vf[:, 0]

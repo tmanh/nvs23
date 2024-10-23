@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from models.vivim import Vivim
+from models.layers.vivim import Vivim
 from options.options import get_dataset
 
 from models.synthesis.lightformer import LightFormer
@@ -76,10 +76,6 @@ class ProposedModel(nn.Module):
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    v = Vivim().to(device)
-    v(torch.zeros((1, 4, 3, 384, 384)).float().to(device))
-    exit()
 
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
