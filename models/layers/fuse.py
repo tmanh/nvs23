@@ -44,7 +44,6 @@ class Fusion(nn.Module):
                 align_corners=True, mode='bilinear'
             )
 
-            n, _, v, h, w = prev_prj.shape
             mf = torch.cat([prev_prj, prj], dim=1)
             prj = fuse(
                 mf
