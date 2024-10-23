@@ -50,6 +50,8 @@ class Fusion(nn.Module):
 
     def forward(self, prjs):
         prev_prj = self.enc4(prjs[-1])  # N, C, V, H, W
+
+        list_fuses = []
         for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
             n, _, v, h, w = prev_prj.shape
             prev_prj = prev_prj.permute(0, 2, 1, 3, 4).view(n * v, -1, h, w)
@@ -70,7 +72,9 @@ class Fusion(nn.Module):
                 prj
             )
 
-        vfeats = prev_prj[:, :-1]
+            list_fuses.append(prev_prj[:, :-1])
+
+        vfeats = list_fuses[-1]
         fused = self.view_fuse(vfeats)
 
-        return fused, vfeats
+        return fused, list_fuses

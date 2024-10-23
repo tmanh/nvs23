@@ -55,6 +55,7 @@ class BaseModule(nn.Module):
         self.init_color_encoder()
         self.init_fusion_module()
         self.init_renderer()
+        self.init_decoder()
 
     def init_color_encoder(self):
         self.encoder = SwinColorFeats()
@@ -65,6 +66,9 @@ class BaseModule(nn.Module):
         height = self.opt.model.H
 
         self.pts_transformer = Screen_PtsManipulator(W=width, H=height, opt=self.opt)
+
+    def init_decoder(self):
+        pass
 
     def init_fusion_module(self):
         pass
@@ -111,7 +115,9 @@ class BaseModule(nn.Module):
         merged_fs, refined_fs = self.merge_net(
             prjs
         )
-        print(merged_fs.shape, refined_fs.shape)
+        for f in refined_fs:
+            print(f.shape)
+        print(merged_fs.shape)
         exit()
 
         out = self.up1(refined_fs)
