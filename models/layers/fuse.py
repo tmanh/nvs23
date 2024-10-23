@@ -34,15 +34,18 @@ class Fusion(nn.Module):
         print(prjs[-1].shape)
         prev_prj = self.enc4(prjs[-1])  # N, C, V, H, W
         for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
+            n, _, v, h, w = prev_prj.shape
+            prev_prj = prev_prj.permute(0, 2, 1, 3, 4).view(n * v, -1, h, w)
+            
+            n, _, v, h, w = prj.shape
+            prj = prj.permute(0, 2, 1, 3, 4).view(n * v, -1, h, w)
             prev_prj = F.interpolate(
                 prev_prj, size=prj.shape[-2:],
                 align_corners=True, mode='bilinear'
             )
 
             n, _, v, h, w = prev_prj.shape
-            mf = torch.cat(
-                [prev_prj, prj], dim=1).permute(0, 2, 1, 3, 4
-            ).view(n * v, -1, h, w)
+            mf = torch.cat([prev_prj, prj], dim=1)
             prj = fuse(
                 mf
             ).view(n, v, -1, h, w).permute(0, 2, 1, 3, 4)
