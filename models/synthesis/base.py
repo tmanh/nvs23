@@ -102,31 +102,13 @@ class BaseModule(nn.Module):
                     self.compute_K(K, ori_shape, colors.shape[-2:]),
                     src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
                 )
-                prj_feats.append(prj_fs)
-                prj_depths.append(prj_pts)
-        
-        for d in prj_depths:
-            print(d.shape)
-        exit()
+                prj_feats.append(prj_fs)     # V, N, C, H, W
+                prj_depths.append(prj_pts)   # V, N, C, H, W
 
-        prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
-        prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
+            prjs = [torch.cat([vf, df], dim=2) for vf, df in zip(prj_feats, prj_depths)]
         
-        if ps > 0:
-            prj_depths = prj_depths[
-                :, :, :,
-                py:py + ps,
-                px:px + ps
-            ]
-            prj_fs = prj_fs[
-                :, :, :,
-                py:py + ps,
-                px:px + ps
-            ]
-            shape = (ps, ps)
-
         refined_fs = self.merge_net(
-            prj_fs, prj_depths
+            prjs
         )
 
         out = self.up1(refined_fs)

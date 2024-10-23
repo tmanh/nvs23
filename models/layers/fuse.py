@@ -1,112 +1,53 @@
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from models.layers.vivim import MambaLayer
 
 
-class FusionBlock(nn.Module):
-    def __init__(self, in_dim, window_size) -> None:
-        super().__init__()
-
-        self.cross = MambaLayer(in_dim)
-
-    def forward(self, vf, df):
-        x = vf[:, 0]
-        y = vf[:, 1:]
-        xm = df[:, 0]
-        ym = df[:, 1:]
-
-        x = self.cross(x, y, xm, ym)
-        x = x + self.spatial(x)
-
-        return x
-
-
 class Fusion(nn.Module):
+    def create_fuse_layer(self, in_dim, out_dim):
+        return nn.Sequential(
+            nn.Conv2d(in_dim, out_dim * 4, kernel_size=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_dim * 4, out_dim * 4, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_dim * 4, out_dim, kernel_size=3, padding=1),
+        )
+
     def __init__(self) -> None:
         super().__init__()
 
-        self.prj = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(192, 96, 3, 1, 1)
-        )
+        self.enc1 = MambaLayer(96 + 1)
+        self.enc2 = MambaLayer(192 + 1)
+        self.enc3 = MambaLayer(384 + 1)
+        self.enc4 = MambaLayer(768 + 1)
 
-        ########### STAGE BASE ATTENTION
-        self.enc1 = FusionBlock(96, window_size=8)
-        self.enc2 = FusionBlock(192, window_size=6)
-        self.enc3 = FusionBlock(384, window_size=4)
-        self.enc4 = FusionBlock(768, window_size=4)
+        self.fuse2 = self.create_fuse_layer(96 + 1 + 192 + 1, 96 + 1)
+        self.fuse3 = self.create_fuse_layer(192 + 1 + 384 + 1, 192 + 1)
+        self.fuse4 = self.create_fuse_layer(384 + 1 + 768 + 1, 384 + 1)
 
-        self.down1 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(96, 192, 3, 2, 1)
-        )
-        self.down2 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(192, 384, 3, 2, 1)
-        )
-        self.down3 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(384, 768, 3, 2, 1)
-        )
+        self.fuses = nn.ModuleList([self.fuse4, self.fuse3, self.fuse2])
+        self.encs = nn.ModuleList([self.enc3, self.enc2, self.enc1])
 
-        self.up1 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(768, 384, 3, 1, 1)
-        )
-        self.up2 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(384 * 2, 192, 3, 1, 1)
-        )
-        self.up3 = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(192 * 2, 96, 3, 1, 1)
-        )
+    def forward(self, prjs):
+        prev_prj = self.enc4(prjs[-1])  # B, V, C, H, W
+        for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
+            prev_prj = F.interpolate(
+                prev_prj, size=prj.shape[-2:],
+                align_corners=True, mode='bilinear'
+            )
 
-        self.out = nn.Sequential(
-            nn.GELU(),
-            nn.Conv2d(96 * 2, 96, 3, 1, 1)
-        )
+            v, b, c, h, w = prev_prj.shape
+            prj = fuse(
+                torch.cat([prev_prj, prj], dim=2).view(v * b, -1, h, w)
+            ).view(v, b, -1, h, w)
 
-    def depth_split(self, d):
-        N, V, _, H, W = d.shape
-        d1 = d.contiguous().view(N * V, -1, H, W)
-        d2 = F.interpolate(d1, size=(H // 2, W // 2), mode='nearest')
-        d3 = F.interpolate(d1, size=(H // 4, W // 4), mode='nearest')
-        d4 = F.interpolate(d1, size=(H // 8, W // 8), mode='nearest')
-
-        return (
-            d1.view(N, V, -1, H, W),
-            d2.view(N, V, -1, H // 2, W // 2),
-            d3.view(N, V, -1, H // 4, W // 4),
-            d4.view(N, V, -1, H // 8, W // 8),
-        )
-
-    def forward(self, prj_feats, prj_depths):
-        B, V, _, H, W = prj_feats.shape
-
-        ds1, ds2, ds3, ds4 = self.depth_split(prj_depths)
-
-        prj_feats_reshape = prj_feats.view(B * V, -1, H, W)
-        fs1 = prj_feats_reshape[:, :96] + self.prj(prj_feats_reshape)
-        fs2 = self.down1(fs1)
-        fs3 = self.down2(fs2)
-        fs4 = self.down3(fs3)
-
-        mfs1 = self.enc1(fs1.view(B, V, -1, *ds1.shape[-2:]), ds1)
-        mfs2 = self.enc2(fs2.view(B, V, -1, *ds2.shape[-2:]), ds2)
-        mfs3 = self.enc3(fs3.view(B, V, -1, *ds3.shape[-2:]), ds3)
-        mfs4 = self.enc4(fs4.view(B, V, -1, *ds4.shape[-2:]), ds4)
-
-        ufs3 = self.up1(mfs4)
-        ufs3 = F.interpolate(ufs3, size=fs3.shape[-2:], mode='nearest')
-
-        ufs2 = self.up2(torch.cat([mfs3, ufs3], dim=1))
-        ufs2 = F.interpolate(ufs2, size=fs2.shape[-2:], mode='nearest')
-
-        ufs1 = self.up3(torch.cat([mfs2, ufs2], dim=1))
-        ufs1 = F.interpolate(ufs1, size=fs1.shape[-2:], mode='nearest')
-
-        out = mfs1 + self.out(torch.cat([mfs1, ufs1], dim=1))
+            prev_prj = enc(
+                prj
+            )
+        print(prev_prj.shape)
+        exit()
 
         return out
 
