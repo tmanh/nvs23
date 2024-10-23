@@ -119,7 +119,7 @@ class MambaLayer(nn.Module):
                 d_conv=d_conv,    # Local convolution width
                 expand=expand,    # Block expansion factor
                 bimamba_type="v3",
-                # use_fast_path=False,
+                nframes=4,
         )
 
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -146,6 +146,7 @@ class MambaLayer(nn.Module):
 
     def forward(self, x):
         B, C, nf, H, W = x.shape
+        self.mamba.nframes = nf
 
         assert C == self.dim
         n_tokens = x.shape[2:].numel()
@@ -191,8 +192,6 @@ class mamba_block(nn.Module):
 
         self.out_indices = out_indices
 
-
-
     def forward_features(self, x):
         outs = []
         bz, nf, nc, h, w = x.shape
@@ -204,7 +203,7 @@ class mamba_block(nn.Module):
             # first, obtain patch embeddings
             # print(hs.shape)
             hs, height, width = embedding_layer(hs)
-
+            
             # second, send embeddings through blocks
             for i, blk in enumerate(block_layer):
                 layer_outputs = blk(hs, height, width, False)
@@ -217,7 +216,10 @@ class mamba_block(nn.Module):
             # print(hs.shape)
             hs = hs.reshape(bz,nf,hs.shape[-3],hs.shape[-2],hs.shape[-1]).transpose(1,2)
             # print(x.size())
+            print(hs.shape)
             hs = mam_stage(hs)
+            print(hs.shape)
+            exit()
             # print(x.shape)
             hs = hs.transpose(1,2)
             hs = hs.reshape(bz*nf,hs.shape[-3],hs.shape[-2],hs.shape[-1])
@@ -229,8 +231,6 @@ class mamba_block(nn.Module):
 
     def forward(self, x):
         x = self.forward_features(x)
-        # for xx in x:
-        #     print(xx.shape)
         return x
 
 
@@ -314,8 +314,10 @@ class Vivim(nn.Module):
 
     def forward(self, x_in):
         bz, nf, nc, h, w = x_in.shape
+        print(x_in.shape)
         outs = self.encoder(x_in)
-        print(outs.shape)
+        for xx in outs:
+            print(xx.shape)
         logits = self.decode(outs,bz,nf)
         print(logits.shape)
         exit()

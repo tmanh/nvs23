@@ -181,9 +181,6 @@ class Mamba(nn.Module):
         self.D_s = nn.Parameter(torch.ones(self.d_inner, device=device))  # Keep in fp32
         self.D_s._no_weight_decay = True
 
-
-
-
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
 
     def forward(self, hidden_states, inference_params=None):
@@ -242,9 +239,9 @@ class Mamba(nn.Module):
                     delta_softplus=True,
                 )
                 A_s = -torch.exp(self.A_s_log.float())
-
+                print(xz.shape, self.nframes)
                 xz_s = xz.chunk(self.nframes, dim=-1)
-                xz_s = torch.stack(xz_s,dim=-1)
+                xz_s = torch.stack(xz_s, dim=-1)
                 xz_s = xz_s.flatten(-2)
                 out_s = mamba_inner_fn_no_out_proj(
                     xz_s,
