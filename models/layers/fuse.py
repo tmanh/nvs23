@@ -70,6 +70,7 @@ class Fusion(nn.Module):
                 prj
             )
 
-        fused = self.view_fuse(prev_prj[:, :-1])
+        vfeats = prev_prj[:, :-1]
+        fused = self.view_fuse(vfeats)
 
-        return fused, prev_prj
+        return fused, vfeats
