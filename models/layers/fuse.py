@@ -11,13 +11,13 @@ class MultiViewAttentionFusion(nn.Module):
         self.attention = nn.MultiheadAttention(embed_dim=input_channels, num_heads=n_heads)
 
     def forward(self, x):
-        N, V, C, H, W = x.shape
-        print(x.shape)
-        exit()
-        x = x.view(N, V, C, -1).permute(1, 0, 3, 2)  # Reshape to (V, N, HW, C)
-        x = x.reshape(V, N * H * W, C)  # Flatten the spatial dimensions
-        attention_out, _ = self.attention(x, x, x)  # Self-attention over viewpoints
+        N, C, V, H, W = x.shape
+
+        x = x.view(N, V, C, -1).permute(1, 0, 3, 2)    # Reshape to (V, N, HW, C)
+        x = x.reshape(V, N * H * W, C)                 # Flatten the spatial dimensions
+        attention_out, _ = self.attention(x, x, x)     # Self-attention over viewpoints
         attention_out = attention_out.mean(dim=0).view(N, C, H, W)  # Merge viewpoints
+        
         return attention_out
 
 
@@ -70,6 +70,6 @@ class Fusion(nn.Module):
                 prj
             )
 
-        fused = self.view_fuse(prev_prj)
+        fused = self.view_fuse(prev_prj[:, :-1])
 
         return fused, prev_prj
