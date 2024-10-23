@@ -105,7 +105,8 @@ class BaseModule(nn.Module):
                 prj_feats.append(prj_fs)     # V, N, C, H, W
                 prj_depths.append(prj_pts)   # V, N, C, H, W
 
-            prjs = [torch.cat([vf, df], dim=2) for vf, df in zip(prj_feats, prj_depths)]
+            # N, C, V, H, W
+            prjs = [torch.cat([vf, df], dim=2).permute(1, 2, 0, 3, 4) for vf, df in zip(prj_feats, prj_depths)]
         
         refined_fs = self.merge_net(
             prjs
