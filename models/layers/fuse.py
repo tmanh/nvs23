@@ -53,18 +53,3 @@ class Fusion(nn.Module):
             )
 
         return prev_prj
-
-    def split(self, prj_feats, B, V, H, W):
-        fs1 = prj_feats[:, :, :96]
-        fs2 = prj_feats[:, :, 96:160].view(
-            B, V, 64, H // 2, 2, W // 2, 2).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B * V, 256, H // 2, W // 2)
-        fs3 = prj_feats[:, :, 160:192].view(
-            B, V, 32, H // 4, 4, W // 4, 4).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B * V, 512, H // 4, W // 4)
-        fs4 = prj_feats[:, :, 192:].view(
-            B, V, 64, H // 8, 8, W // 8, 8).permute(0, 1, 2, 4, 6, 3, 5).contiguous().view(B * V, 4096, H // 8, W // 8)
-            
-        fs2 = self.prj_2(fs2).view(B, V, 192, H // 2, W // 2)
-        fs3 = self.prj_3(fs3).view(B, V, 384, H // 4, W // 4)
-        fs4 = self.prj_4(fs4).view(B, V, 768, H // 8, W // 8)
-
-        return fs1, fs2, fs3, fs4

@@ -239,7 +239,6 @@ class Mamba(nn.Module):
                     delta_softplus=True,
                 )
                 A_s = -torch.exp(self.A_s_log.float())
-                print(xz.shape, self.nframes)
                 xz_s = xz.chunk(self.nframes, dim=-1)
                 xz_s = torch.stack(xz_s, dim=-1)
                 xz_s = xz_s.flatten(-2)
