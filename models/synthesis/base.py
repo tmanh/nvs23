@@ -105,7 +105,8 @@ class BaseModule(nn.Module):
                 prj_feats.append(prj_fs)
                 prj_depths.append(prj_pts)
         
-        print(prj_depths.shape)
+        for d in prj_depths:
+            print(d.shape)
         exit()
 
         prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
