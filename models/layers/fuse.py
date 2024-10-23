@@ -31,6 +31,7 @@ class Fusion(nn.Module):
         self.encs = nn.ModuleList([self.enc3, self.enc2, self.enc1])
 
     def forward(self, prjs):
+        print(prjs[-1].shape)
         prev_prj = self.enc4(prjs[-1])  # B, V, C, H, W
         for prj, fuse, enc in zip(prjs[::-1][1:], self.fuses, self.encs):
             prev_prj = F.interpolate(
