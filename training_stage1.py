@@ -18,7 +18,9 @@ from einops import rearrange
 from tqdm import tqdm
 import lpips
 
+from models.losses.synthesis import PerceptualLoss
 from models.losses.cobi import ContextualBilateralLoss
+from models.losses.functional import contextual_loss
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
@@ -131,7 +133,8 @@ def main(args) -> None:
     if accelerator.is_local_main_process:
         print(f"Dataset contains {len(dataset):,} images from {dataset.file_list}")
 
-    cobi = ContextualBilateralLoss(device=device)
+    # cobi = ContextualBilateralLoss(device=device)
+    ploss = PerceptualLoss().cuda()
 
     # Prepare models for training:
     renderer.to_train().to(device)
@@ -169,18 +172,21 @@ def main(args) -> None:
             N, V, _, H, W = src_cs.shape
             py = np.random.randint(0, H - ps)
             px = np.random.randint(0, W - ps)
-            raw = renderer.forward_stage1(
+            # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
+            raw = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
                 dst_Rts, torch.inverse(dst_Rts), 
                 py=py, px=px, ps=ps
             )
-            dst_cs = dst_cs[..., py:py+ps, px:px+ps]
-            src_cs = src_cs[..., py:py+ps, px:px+ps]
-            src_cs = src_cs.view(N * V, -1, ps, ps)
+            dst_cs = dst_cs.squeeze(1)
 
-            loss = l1(raw, src_cs) + cobi(raw, src_cs)
+            # src_cs = src_cs[..., py:py+ps, px:px+ps]
+            # src_cs = src_cs.view(N * V, -1, ps, ps)
+            loss_l1 = l1(raw, dst_cs)
+            loss_p = ploss(raw, dst_cs)
+            loss = loss_l1 + loss_p
 
             opt.zero_grad()
             accelerator.backward(loss)
@@ -191,7 +197,7 @@ def main(args) -> None:
             step_loss.append(loss.item())
             epoch_loss.append(loss.item())
             pbar.update(1)
-            pbar.set_description(f"Epoch: {epoch:04d}, Global Step: {global_step:07d}, Loss: {loss.item():.6f}")
+            pbar.set_description(f"Global Step: {global_step:07d}, L1: {loss_l1.item():.6f}, P: {loss_p.item():.6f}")
 
             # Log loss values:
             if global_step % cfg.train.log_every == 0:

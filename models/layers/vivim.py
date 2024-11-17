@@ -60,10 +60,11 @@ class DWConv(nn.Module):
         self.dwconv = nn.Conv3d(dim, dim, 3, 1, 1, bias=True, groups=dim)
 
     def forward(self, x, nf, H, W):
-        B, N, C = x.shape
-        x = x.transpose(1, 2).view(B, C, nf, H, W)
+        _, _, C = x.shape
+        
+        x = x.view(-1, H, W, nf, C).permute(0, 4, 3, 1, 2)
         x = self.dwconv(x)
-        x = x.flatten(2).transpose(1, 2)
+        x = x.permute(0, 3, 4, 2, 1).reshape(-1, nf, C)
 
         return x
 
@@ -112,12 +113,18 @@ class MambaLayer(nn.Module):
         self.dim = dim
         self.norm1 = nn.LayerNorm(dim)
         self.mamba = Mamba(
-                d_model=dim, # Model dimension d_model
-                d_state=d_state,  # SSM state expansion factor
-                d_conv=d_conv,    # Local convolution width
-                expand=expand,    # Block expansion factor
-                bimamba_type="v3",
-                nframes=4,
+            d_model=dim, # Model dimension d_model
+            d_state=d_state,  # SSM state expansion factor
+            d_conv=d_conv,    # Local convolution width
+            expand=expand,    # Block expansion factor
+        )
+
+        self.inv_norm1 = nn.LayerNorm(dim)
+        self.inv_mamba = Mamba(
+            d_model=dim, # Model dimension d_model
+            d_state=d_state,  # SSM state expansion factor
+            d_conv=d_conv,    # Local convolution width
+            expand=expand,    # Block expansion factor
         )
 
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
@@ -147,13 +154,23 @@ class MambaLayer(nn.Module):
         self.mamba.nframes = nf
 
         assert C == self.dim
-        n_tokens = x.shape[2:].numel()
-        img_dims = x.shape[2:]
-        x_flat = x.reshape(B, C, n_tokens).transpose(-1, -2)
+
+        x_flat = x.permute(0, 3, 4, 2, 1).reshape(B * H * W, nf, C)
 
         x_mamba = x_flat + self.drop_path(self.mamba(self.norm1(x_flat)))
+        x_mamba = x_mamba + torch.flip(
+            self.drop_path(
+                self.inv_mamba(
+                    self.inv_norm1(
+                        torch.flip(x_mamba, dims=[1])
+                    )
+                )
+            
+            )
+        , dims=[1])
         x_mamba = x_mamba + self.drop_path(self.mlp(self.norm2(x_mamba), nf, H, W))
-        out = x_mamba.transpose(-1, -2).reshape(B, C, *img_dims)
+        
+        out = x_mamba.view(-1, H, W, nf, C).permute(0, 4, 3, 1, 2)
 
         return out
 
@@ -298,7 +315,6 @@ class Vivim(nn.Module):
         hidden_states = self.decoder.batch_norm(hidden_states)
         hidden_states = self.decoder.activation(hidden_states)
         hidden_states = self.decoder.dropout(hidden_states)
-
 
         logits = self.out(hidden_states)
 

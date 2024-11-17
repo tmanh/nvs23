@@ -109,80 +109,36 @@ class BaseModule(nn.Module):
                 prj_feats.append(prj_fs)     # V, N, C, H, W
                 prj_depths.append(prj_pts)   # V, N, C, H, W
 
+            warped, prj_pts = self.project(
+                colors, depths, ori_shape,
+                K,
+                src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
+            )
+
+            # for i in range(len(prj_feats)):
+            #     V, B, C, H, W = warped.shape
+            #     swarped = F.interpolate(
+            #         warped.view(V * B, C, H, W),
+            #         size=prj_feats[i].shape[-2:], mode='nearest'
+            #     ).view(V, B, C, *prj_feats[i].shape[-2:])
+            #     prj_feats[i][:, :, :3] = swarped
+
             # N, C, V, H, W
             prjs = [torch.cat([vf, df], dim=2).permute(1, 2, 0, 3, 4) for vf, df in zip(prj_feats, prj_depths)]
         
-        merged_fs, refined_fs = self.merge_net(
+        merged_fs = self.merge_net(
             prjs
         )
-        for f in refined_fs:
-            print(f.shape)
-        print(merged_fs.shape)
-        exit()
 
-        out = self.up1(refined_fs)
+        # out = F.interpolate(merged_fs, size=ori_shape, mode='nearest')
+
+        out = self.up1(merged_fs)
         out = F.interpolate(out, scale_factor=2, mode='nearest')
         out = self.up2(out)
-        out = F.interpolate(out, size=shape, mode='nearest')
+        out = F.interpolate(out, size=ori_shape, mode='nearest')
         out = self.out(out)
 
-        return out, warped
-    
-    def forward_train(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
-        shape = colors.shape[-2:]
-        fs = self.encoder(colors)
-
-        prj_fs, warped, prj_depths = self.project(
-            colors, depths, fs, K,
-            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
-            False
-        )
-        prj_depths = prj_depths.permute(1, 0, 2, 3, 4)
-        prj_fs = prj_fs.permute(1, 0, 2, 3, 4)
-        
-        if ps > 0:
-            prj_depths = prj_depths[
-                ...,
-                py:py + ps,
-                px:px + ps
-            ]
-            prj_fs = prj_fs[
-                ...,
-                py:py + ps,
-                px:px + ps
-            ]
-
-        refined_fs = self.merge_net(
-            prj_fs, prj_depths
-        )
-
-        N, V, _, H, W = fs.shape
-        fs = fs[:, :, :96].view(N * V, 96, H, W)
-        fs = fs[
-            ...,
-            py:py + ps,
-            px:px + ps
-        ]
-
-        out = self.decode(ps, refined_fs)
-        raw = self.decode(ps, fs).view(N, V, 3, ps, ps)
-        return out, raw
-    
-    def forward_stage1(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, py=-1, px=-1, ps=-1):
-        fs = self.encoder(colors)
-
-        N, V, _, H, W = fs.shape
-        fs = fs[:, :, :96].view(N * V, 96, H, W)
-        if ps != -1:
-            fs = fs[
-                ...,
-                py:py + ps,
-                px:px + ps
-            ]
-        else:
-            ps = (H, W)
-
-        return self.decode(ps, fs)
+        return out[:, :3], warped
 
     def decode(self, shape, refined_fs):
         out = self.up1(refined_fs)

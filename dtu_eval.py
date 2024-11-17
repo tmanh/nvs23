@@ -82,7 +82,7 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    # sd = torch.load('exp/checkpoints/0040000.pt', weights_only=False)
+    # sd = torch.load('exp/checkpoints/0020000.pt', weights_only=False)
     # model.load_state_dict(sd)
 
     H, W = 512, 384
@@ -143,18 +143,6 @@ def main(args):
             visualize=True,
         )
 
-        stage1 = model.forward_stage1(
-            depths,
-            colors,
-            K,
-            
-            src_RTs,
-            src_RTinvs,
-            
-            dst_RTs, 
-            dst_RTinvs,
-        )
-
     out = F.interpolate(
         acolors[:, 0].view(1, 3, oH, oW),
         size=(H, W),
@@ -175,11 +163,6 @@ def main(args):
     for k in range(warped.shape[0]):
         out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
         cv2.imwrite(f'output/out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
-
-    stage1 = ((stage1 + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
-    for k in range(stage1.shape[0]):
-        out = stage1[k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        cv2.imwrite(f'output/stage1_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
 
 if __name__ == "__main__":

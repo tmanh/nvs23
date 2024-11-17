@@ -87,31 +87,24 @@ class L2LossWarpper(nn.Module):
 # Adapted from SPADE's implementation
 # (https://github.com/NVlabs/SPADE/blob/master/models/networks/loss.py)
 class PerceptualLoss(nn.Module):
-    def __init__(self, opt):
+    def __init__(self):
         super().__init__()
         self.model = VGG19(
             requires_grad=False,
         )  # Set to false so that this part of the network is frozen
         self.criterion = nn.L1Loss()
         self.weights = [1.0 / 32, 1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0]
+        self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).cuda()  # Reshape for broadcasting
+        self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).cuda()    # Reshape for broadcasting
 
-    def forward(self, pred_img, gt_img, coarse=None):
-        coarse_fs = None
-        if len(pred_img.shape) == 5:
-            gt_fs = self.model(gt_img[0])
-            pred_fs = self.model(pred_img[1])
-            if coarse is not None:
-                coarse_fs = self.model(coarse[1])
-        else:
-            gt_fs = self.model(gt_img)
-            pred_fs = self.model(pred_img)
-            if coarse is not None:
-                coarse_fs = self.model(coarse)
+    def forward(self, pred_img, gt_img):
+        pred_img = (pred_img - self.mean) / self.std
+        gt_img = (gt_img - self.mean) / self.std
+
+        gt_fs = self.model(gt_img)
+        pred_fs = self.model(pred_img)
 
         # Collect the losses at multiple layers (need unsqueeze in
         # order to concatenate these together)
         loss = sum(self.weights[i] * self.criterion(pred_fs[i], gt_fs[i]) for i in range(len(gt_fs)))
-        if coarse is not None:
-            loss += sum(self.weights[i] * self.criterion(coarse_fs[i], gt_fs[i]) for i in range(len(gt_fs)))
-
-        return {"Perceptual": loss, "Total Loss": loss}
+        return loss
