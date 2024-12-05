@@ -36,7 +36,10 @@ class RasterizePointsXYsBlending(nn.Module):
         self.points_per_pixel = points_per_pixel
         self.opts = opts
 
-    def forward(self, pts3D, src, image_size, depth=False):
+    def forward(self, pts3D, src, image_size, depth=False, radius=None):
+        if radius is None:
+            radius = self.radius
+
         if isinstance(pts3D, list):
             # if the pts3d has different point number for each point cloud
             bs = len(src)
@@ -45,9 +48,9 @@ class RasterizePointsXYsBlending(nn.Module):
                 pts3D[i][:, 0] = - pts3D[i][:, 0] 
 
             if len(image_size) > 1:
-                radius = float(self.radius) / float(image_size[0]) * 2.0
+                radius = float(radius) / float(image_size[0]) * 2.0
             else:
-                radius = float(self.radius) / float(image_size) * 2.0
+                radius = float(radius) / float(image_size) * 2.0
 
             src = [src[i].permute(1,0) for i in range(len(src))]
             pts3D = Pointclouds(points=pts3D, features=src)
@@ -69,9 +72,9 @@ class RasterizePointsXYsBlending(nn.Module):
 
             # Add on the default feature to the end of the src
             if len(image_size) > 1:
-                radius = float(self.radius) / float(image_size[0]) * 2.0
+                radius = float(radius) / float(image_size[0]) * 2.0
             else:
-                radius = float(self.radius) / float(image_size) * 2.0
+                radius = float(radius) / float(image_size) * 2.0
 
             pts3D = Pointclouds(points=pts3D, features=src.permute(0, 2, 1))
 
@@ -80,7 +83,7 @@ class RasterizePointsXYsBlending(nn.Module):
         # self._num_points_per_cloud = self._P * torch.ones((self._N,), dtype=torch.int64, device=self.device)
         # Modified this in the pytorch code
         points_idx, z_buf, dist = rasterize_points(
-            pts3D, image_size, radius, self.points_per_pixel
+            pts3D, image_size, radius, self.points_per_pixel,
         )
 
         dist = dist / pow(radius, self.opts.model.rad_pow)

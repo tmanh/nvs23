@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.utils.data import DataLoader
+from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import make_grid
 from accelerate import Accelerator
@@ -103,7 +104,7 @@ def main(args) -> None:
 
     # Create model:
     renderer = LightFormer(cfg)
-    if cfg.train.resume:
+    if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
             print(f"strictly load weight from checkpoint: {cfg.train.resume}")
@@ -158,35 +159,44 @@ def main(args) -> None:
     l1 = nn.L1Loss()
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
-        for dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts in loader:
+        for dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts in loader:
             dataset.n_samples = np.random.choice([3, 4, 5])
+            
+            dst_ds = dst_ds.float().to(device)
             dst_cs = dst_cs.float().to(device)
             src_cs = src_cs.float().to(device)
             src_ds = src_ds.float().to(device)
             K = K.float().to(device)
             dst_Rts = dst_Rts.float().to(device)
             src_Rts = src_Rts.float().to(device)
-
-            # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False
-            ps = 256
-            N, V, _, H, W = src_cs.shape
-            py = np.random.randint(0, H - ps)
-            px = np.random.randint(0, W - ps)
+            
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
-            raw = renderer(
+            pred, merged_clr, merged_dpt, warp = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
-                dst_Rts, torch.inverse(dst_Rts), 
-                py=py, px=px, ps=ps
+                dst_Rts, torch.inverse(dst_Rts),
+                visualize=False
             )
             dst_cs = dst_cs.squeeze(1)
 
-            # src_cs = src_cs[..., py:py+ps, px:px+ps]
-            # src_cs = src_cs.view(N * V, -1, ps, ps)
-            loss_l1 = l1(raw, dst_cs)
-            loss_p = ploss(raw, dst_cs)
-            loss = loss_l1 + loss_p
+            # import cv2
+            # x = dst_cs[0].permute(1, 2, 0) * 255
+            # x = x.detach().cpu().numpy().astype(np.uint8)
+            # cv2.imwrite('x.png', x)
+            # x = pred[0].permute(1, 2, 0) * 255
+            # x = x.detach().cpu().numpy().astype(np.uint8)
+            # cv2.imwrite('xp.png', x)
+            # for i in range(warp.shape[1]):
+            #     x = warp[0][i].permute(1, 2, 0) * 255
+            #     x = x.detach().cpu().numpy().astype(np.uint8)
+            #     cv2.imwrite(f'xs_{i}.png', x)
+
+            loss_l1 = l1(pred, dst_cs)
+            loss_p = ploss(pred, dst_cs)
+            loss_rpj = l1(merged_clr, F.interpolate(dst_cs, size=merged_clr.shape[-2:], mode='bilinear'))
+            loss_dpt = l1(merged_dpt, F.interpolate(dst_ds.squeeze(1), size=merged_dpt.shape[-2:], mode='nearest'))
+            loss = loss_l1 + loss_p + loss_rpj + loss_dpt
 
             opt.zero_grad()
             accelerator.backward(loss)

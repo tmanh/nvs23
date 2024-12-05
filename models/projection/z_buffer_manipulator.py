@@ -71,18 +71,18 @@ class Screen_PtsManipulator(nn.Module):
         
         return sampler
         
-    def world_to_view(self, pts3D, K, K_inv, RT_cam2, RTinv_cam2):
+    def world_to_view(self, pts3D, K, K_inv, RT_cam2, RTinv_cam2, H, W):
         sampler = self.world_to_view_screen(pts3D, K, K_inv, RT_cam2, RTinv_cam2)
 
         # NOTE: after 0.4.0, pytorch3d changed the NDC coordinate system.
         # They added the aspect ratio to the NDC coordinate system.
         # So, the [-1, 1] x [-1, 1] is changed to [-1, 1] x [-s, s]
         if p3dv <= '0.4.0':
-            sampler[:, 0] = (sampler[:, 0] / (self.W - 1) * 2.0 - 1)
-            sampler[:, 1] = (sampler[:, 1] / (self.H - 1) * 2.0 - 1)
+            sampler[:, 0] = (sampler[:, 0] / (W - 1) * 2.0 - 1)
+            sampler[:, 1] = (sampler[:, 1] / (H - 1) * 2.0 - 1)
         else:
-            min_size = min(self.W, self.H)
-            sampler[:, 0] = (sampler[:, 0] / (min_size - 1) * 2.0 - (self.W / min_size))
-            sampler[:, 1] = (sampler[:, 1] / (min_size - 1) * 2.0 - (self.H / min_size))
+            min_size = min(W, H)
+            sampler[:, 0] = (sampler[:, 0] / (min_size - 1) * 2.0 - (W / min_size))
+            sampler[:, 1] = (sampler[:, 1] / (min_size - 1) * 2.0 - (H / min_size))
 
         return sampler

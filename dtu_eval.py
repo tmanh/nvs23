@@ -1,21 +1,12 @@
 import os
-import lpips
-import imageio
 import argparse 
 import numpy as np
-from copy import deepcopy
-from collections import OrderedDict
 from omegaconf import OmegaConf
-from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
 import cv2
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-
-from models.layers.vivim import Vivim
-from options.options import get_dataset
 
 from models.synthesis.lightformer import LightFormer
 
@@ -82,21 +73,22 @@ def main(args):
 
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    # sd = torch.load('exp/checkpoints/0020000.pt', weights_only=False)
-    # model.load_state_dict(sd)
+    # "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
+    sd = torch.load('exp/checkpoints/0035000.pt', weights_only=False)
+    model.load_state_dict(sd)
 
     H, W = 512, 384
 
-    adepths = torch.tensor(np.load('wildrgb/apple_002/depths.npy'))
+    adepths = torch.tensor(np.load('wildrgb/cake_029/depths.npy'))
     adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
 
-    acolors = torch.tensor(np.load('wildrgb/apple_002/colors.npy'))
+    acolors = torch.tensor(np.load('wildrgb/cake_029/colors.npy'))
     acolors = acolors.permute(0, 3, 1, 2).unsqueeze(0).float().cuda()
 
-    aK = torch.tensor(np.load('wildrgb/apple_002/intrinsic.npy'))
+    aK = torch.tensor(np.load('wildrgb/cake_029/intrinsic.npy'))
     aK = aK.unsqueeze(0).float().cuda()
 
-    aRTs = torch.tensor(np.load('wildrgb/apple_002/pose.npy'))
+    aRTs = torch.tensor(np.load('wildrgb/cake_029/pose.npy'))
     aRTs = aRTs.unsqueeze(0).float().cuda()
 
     dst_RTs = aRTs[:, 0, :, :]
@@ -105,9 +97,9 @@ def main(args):
     aRTs_inv = torch.inverse(aRTs)
     dst_RTinvs = torch.inverse(dst_RTs)
 
-    depths = adepths[:, 1:]
-    colors = acolors[:, 1:] * 2.0 - 1.0
     K = aK[:, 0]
+    depths = adepths[:, 1:]
+    colors = acolors[:, 1:]
     src_RTs = aRTs[:, 1:]
     src_RTinvs = aRTs_inv[:, 1:]
 
@@ -130,7 +122,7 @@ def main(args):
     
     model.eval()
     with torch.no_grad():
-        syn, warped = model(
+        syn, lr_merged, _, warped = model(
             depths,
             colors,
             K,
@@ -155,15 +147,25 @@ def main(args):
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('output/out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-    syn = ((syn + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
+    syn = (syn * 255.0).clamp(0, 255.0)
     syn = syn[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('output/syn.png', cv2.cvtColor(syn, cv2.COLOR_RGB2BGR))
 
-    warped = ((warped + 1.0) / 2.0 * 255.0).clamp(0, 255.0)
-    for k in range(warped.shape[0]):
-        out = warped[k, 0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        cv2.imwrite(f'output/out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    warped, merged = warped
+    for l, lw in enumerate(warped):
+        lw = (lw * 255.0).clamp(0, 255.0)
+        for k in range(lw.shape[1]):
+            out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+            cv2.imwrite(f'output/out_{l}_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
+    merged = (merged * 255.0).clamp(0, 255.0)
+    out = merged[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    cv2.imwrite('output/out_p.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    
+    merged = (lr_merged * 255.0).clamp(0, 255.0)
+    out = merged[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    cv2.imwrite('output/out_m.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="evaluation")

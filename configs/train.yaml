@@ -1,6 +1,6 @@
 model:
-  H: 512
-  W: 384
+  H: 512  # 512
+  W: 384  # 
   radius: 1.5
   rad_pow: 2
   pp_pixel: 24
@@ -23,11 +23,11 @@ train:
   exp_dir: 'exp'
   learning_rate: 1e-4
   # total batch size
-  batch_size: 4
+  batch_size: 2
   num_workers: 2
-  train_steps: 150000
+  train_steps: 300000
   log_every: 50
   ckpt_every: 5000
   image_every: 10000
   val_every: 10000
-  resume: ~
+  resume: exp/checkpoints/0010000.pt

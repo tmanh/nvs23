@@ -63,8 +63,6 @@ class SSIM(nn.Module):
         else:
             return {"ssim": ssim(pred_img, gt_img)}
 
-        
-
 
 # Wrapper of the L1Loss so that the format matches what is expected
 class L1LossWrapper(nn.Module):
@@ -107,4 +105,4 @@ class PerceptualLoss(nn.Module):
         # Collect the losses at multiple layers (need unsqueeze in
         # order to concatenate these together)
         loss = sum(self.weights[i] * self.criterion(pred_fs[i], gt_fs[i]) for i in range(len(gt_fs)))
-        return loss
+        return loss * 0.25

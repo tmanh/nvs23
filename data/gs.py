@@ -288,12 +288,13 @@ class DiffData3:
         Ks[0, 1, :] = self.H / H * Ks[0, 1, :]
         Rts = torch.tensor(Rts)
 
-        return colors[:1], colors[1:], depths[1:], Ks[0], Rts[:1], Rts[1:]
+        return colors[:1], colors[1:], depths[:1], depths[1:], Ks[0], Rts[:1], Rts[1:]
 
     def __getitem__(self, idx):
-        dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
+        dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts = self.read_data_train(idx % len(self.scenes))
 
         src_ds = F.interpolate(src_ds, size=(self.H, self.W), mode='nearest')
+        dst_ds = F.interpolate(dst_ds, size=(self.H, self.W), mode='nearest')
         src_cs = F.interpolate(src_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
         dst_cs = F.interpolate(dst_cs, size=(self.H, self.W), mode='bilinear', align_corners=True, antialias=True)
 
@@ -301,7 +302,4 @@ class DiffData3:
         src_cs = Ft.adjust_hue(src_cs, hue_adjustment)
         dst_cs = Ft.adjust_hue(dst_cs, hue_adjustment)
 
-        dst_cs = dst_cs * 2.0 - 1.0
-        src_cs = src_cs * 2.0 - 1.0
-
-        return dst_cs, src_cs, src_ds, K, dst_Rts, src_Rts
+        return dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts
