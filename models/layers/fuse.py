@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from models.layers.osa import VFBlock
-from models.layers.vivim import ViLViewFuseLayer, ViLViewLayer
+from models.layers.vlstm import ViLViewFuseLayer, ViLViewLayer
 from models.layers.weight_init import trunc_normal_
 from models.layers.gruunet import GRUUNet
 

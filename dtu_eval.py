@@ -74,8 +74,8 @@ def main(args):
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
     # "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
-    sd = torch.load('exp/checkpoints/0035000.pt', weights_only=False)
-    model.load_state_dict(sd)
+    # sd = torch.load('exp/checkpoints/0035000.pt', weights_only=False)
+    # model.load_state_dict(sd)
 
     H, W = 512, 384
 
@@ -143,6 +143,7 @@ def main(args):
         antialias=True
     ).view(N, 3, H, W)
     
+    os.makedirs('output', exist_ok=True)
     out = (out * 255.0).clamp(0, 255.0)
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('output/out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
@@ -151,16 +152,16 @@ def main(args):
     syn = syn[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('output/syn.png', cv2.cvtColor(syn, cv2.COLOR_RGB2BGR))
 
-    warped, merged = warped
+    # warped, merged = warped
     for l, lw in enumerate(warped):
         lw = (lw * 255.0).clamp(0, 255.0)
         for k in range(lw.shape[1]):
             out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
             cv2.imwrite(f'output/out_{l}_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-    merged = (merged * 255.0).clamp(0, 255.0)
-    out = merged[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    cv2.imwrite('output/out_p.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    # merged = (merged * 255.0).clamp(0, 255.0)
+    # out = merged[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    # cv2.imwrite('output/out_p.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
     
     merged = (lr_merged * 255.0).clamp(0, 255.0)
     out = merged[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)

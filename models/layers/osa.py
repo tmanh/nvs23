@@ -14,8 +14,6 @@ from torch import einsum
 from einops import rearrange
 
 from .osa_utils import *
-from flash_attn import flash_attn_qkvpacked_func, flash_attn_func
-from models.layers.vision_lstm.vision_lstm2 import ViLBlock, ViLBlockPair
 
 
 # attention related classes

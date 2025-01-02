@@ -14,13 +14,11 @@ from __future__ import annotations
 
 import torch.nn as nn
 import torch
-from mamba_ssm import Mamba
 import torch.nn.functional as F 
 from timm.models.layers import trunc_normal_
 import math
 
 # Load model directly
-from transformers import SegformerForSemanticSegmentation
 from models.layers.vision_lstm.vision_lstm2 import ViLBlockPair
 
 

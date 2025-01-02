@@ -1,29 +1,6 @@
 import torch
 import torchvision
-
-import torch.nn as nn
-from models.layers.normalization import BatchNorm_StandingStats
     
-
-def get_conv_layer(opt, use_3D=False):
-    if "spectral" in opt.norm_G:
-        return (lambda in_c, out_c, k, p, s: nn.utils.spectral_norm(nn.Conv3d(in_c, out_c, k, p, s))) if use_3D else (lambda in_c, out_c, k, p, s: nn.utils.spectral_norm(nn.Conv2d(in_c, out_c, k, p, s)))
-    elif use_3D:
-        return lambda in_c, out_c, k, p, s: nn.Conv3d(in_c, out_c, k, p, s)
-    else:
-        return lambda in_c, out_c, k, p, s: nn.Conv2d(in_c, out_c, k, p, s)
-
-
-def get_batchnorm_layer(opt):
-    norm_G = opt.norm_G.split(":")[1]
-    if norm_G in ["batch", "spectral_batch"]:
-        norm_layer = nn.BatchNorm2d
-    elif norm_G == "spectral_batchstanding":
-        norm_layer = BatchNorm_StandingStats
-    elif norm_G == "spectral_instance":
-        norm_layer = nn.InstanceNorm2d
-    return norm_layer
-
 
 # VGG architecture, used for the perceptual loss using a pretrained VGG network
 class VGG19(torch.nn.Module):

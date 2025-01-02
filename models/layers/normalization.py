@@ -5,75 +5,6 @@ import torch.nn as nn
 import torch.nn.utils.spectral_norm as spectral_norm
 from torch.nn.parameter import Parameter
 
-def get_linear_layer(opt, bias=False):
-    return (lambda in_c, out_c: nn.utils.spectral_norm(nn.Linear(in_c, out_c, bias=bias))) if "spectral" in opt.norm_G else (lambda in_c, out_c: nn.Linear(in_c, out_c, bias=bias))
-
-
-class LinearNoiseLayer(nn.Module):
-    def __init__(self, opt, noise_sz=20, output_sz=32):
-        """
-        Class for adding in noise to the batch normalisation layer.
-        Based on the idea from BigGAN.
-        """
-        super().__init__()
-        self.noise_sz = noise_sz
-
-        linear_layer = get_linear_layer(opt, bias=False)
-
-        self.gain = linear_layer(noise_sz, output_sz)
-        self.bias = linear_layer(noise_sz, output_sz)
-
-        self.bn = bn(output_sz)
-
-        self.noise_sz = noise_sz
-
-    def forward(self, x):
-        noise = torch.randn(x.size(0), self.noise_sz).to(x.device)
-
-        # Predict biases/gains for this layer from the noise
-        gain = (1 + self.gain(noise)).view(noise.size(0), -1, 1, 1)
-        bias = self.bias(noise).view(noise.size(0), -1, 1, 1)
-
-        return self.bn(x, gain=gain, bias=bias)
-
-
-# Returns a function that creates a normalization function
-# that does not condition on semantic map
-def get_D_norm_layer(opt, norm_type="instance"):
-    # helper function to get # output channels of the previous layer
-    def get_out_channel(layer):
-        if hasattr(layer, "out_channels"):
-            return getattr(layer, "out_channels")
-        return layer.weight.size(0)
-
-    # this function will be returned
-    def add_norm_layer(layer):
-        nonlocal norm_type
-        if norm_type.startswith("spectral"):
-            layer = spectral_norm(layer)
-            subnorm_type = norm_type[len("spectral") :]
-
-        if subnorm_type == "none" or len(subnorm_type) == 0:
-            return layer
-
-        # remove bias in the previous layer, which is meaningless
-        # since it has no effect after normalization
-        if getattr(layer, "bias", None) is not None:
-            delattr(layer, "bias")
-            layer.register_parameter("bias", None)
-
-        if subnorm_type == "batch":
-            norm_layer = nn.BatchNorm2d(get_out_channel(layer), affine=True)
-
-        elif subnorm_type == "instance":
-            norm_layer = nn.InstanceNorm2d(get_out_channel(layer), affine=False)
-        else:
-            raise ValueError(f"normalization layer {subnorm_type} is not recognized")
-
-        return nn.Sequential(layer, norm_layer)
-
-    return add_norm_layer
-
 
 # BatchNorm layers are taken from the BigGAN code base.
 # https://github.com/ajbrock/BigGAN-PyTorch/blob/a5557079924c3070b39e67f2eaea3a52c0fb72ab/layers.py
@@ -100,6 +31,7 @@ class BatchNorm_StandingStats(nn.Module):
         gain = self.gain.view(1, -1, 1, 1)
         bias = self.bias.view(1, -1, 1, 1)
         return self.bn(x, gain=gain, bias=bias)
+
 
 class bn(nn.Module):
     def __init__(self, num_channels, eps=1e-5, momentum=0.1):

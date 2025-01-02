@@ -1,10 +1,10 @@
 model:
   H: 512  # 512
   W: 384  # 
-  radius: 1.5
+  radius: 1.00
   rad_pow: 2
   pp_pixel: 24
-  accumulation: "alphacomposite"
+  accumulation: "wsumnorm"
 
 dataset:
   train:

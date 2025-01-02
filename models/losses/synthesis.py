@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 from models.losses.ssim import ssim
-from models.networks.architectures import VGG19
+from models.losses.architectures import VGG19
 
 
 class SynthesisLoss(nn.Module):

@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import torchvision.models as models
-from models.layers.convnext2 import convnextv2_huge
 from models.layers.swin import SwinTransformerV2
 
 
