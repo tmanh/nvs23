@@ -219,29 +219,27 @@ class BaseModule(nn.Module):
                     warped.append(prj_fs[:, :, -3:])
 
             # warped = None
-            if visualize:
-                prj_clr, prj_pts = self.project(
-                    colors, depths, ori_shape,
-                    K,
-                    src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
-                    radius=3.0
-                )
-                prj_clr, prj_pts = fill_holes(prj_clr, prj_pts)
-                
-                warped.append(prj_clr)
-                
-                warped = (warped, merge_reprojected_views(prj_clr, prj_pts))
+            prj_clr, prj_pts = self.project(
+                colors, depths, ori_shape,
+                K,
+                src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
+                radius=3.0
+            )
+            warped.append(prj_clr)
+            # warped = (warped, merge_reprojected_views(prj_clr, prj_pts))
 
             # N, C, V, H, W
             prjs = [torch.cat([vf, df], dim=2) for vf, df in zip(prj_feats, prj_depths)]
         
         merged_fs = self.merge_net(prjs)
 
+        mask = (torch.sum(prj_pts, dim=1) > 0).float()
+
         final = self.out(merged_fs[:, :-1])
         merged_clr = merged_fs[:, -4:-1]
         merged_dpt = merged_fs[:, -1:]
 
-        return final, merged_clr, merged_dpt, warped  # self.out(merged_fs), warped
+        return final, mask, merged_clr, merged_dpt, warped  # self.out(merged_fs), warped
 
     def view_render(
             self, src_feats, src_pts,

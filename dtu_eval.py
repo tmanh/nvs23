@@ -122,7 +122,7 @@ def main(args):
     
     model.eval()
     with torch.no_grad():
-        syn, lr_merged, _, warped = model(
+        syn, mask, lr_merged, _, warped = model(
             depths,
             colors,
             K,

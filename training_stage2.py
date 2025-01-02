@@ -22,6 +22,8 @@ from models.losses.cobi import ContextualBilateralLoss
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
+from lora_diffusion import inject_trainable_lora, extract_lora_ups_down
+
 from utils.common import instantiate_from_config
 
 

@@ -2,6 +2,7 @@ import os
 from argparse import ArgumentParser
 import warnings
 
+import cv2
 import numpy as np
 
 from omegaconf import OmegaConf
@@ -171,7 +172,7 @@ def main(args) -> None:
             src_Rts = src_Rts.float().to(device)
             
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
-            pred, merged_clr, merged_dpt, warp = renderer(
+            pred, mask, merged_clr, merged_dpt, warp = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
@@ -180,17 +181,21 @@ def main(args) -> None:
             )
             dst_cs = dst_cs.squeeze(1)
 
-            # import cv2
-            # x = dst_cs[0].permute(1, 2, 0) * 255
-            # x = x.detach().cpu().numpy().astype(np.uint8)
-            # cv2.imwrite('x.png', x)
-            # x = pred[0].permute(1, 2, 0) * 255
-            # x = x.detach().cpu().numpy().astype(np.uint8)
-            # cv2.imwrite('xp.png', x)
-            # for i in range(warp.shape[1]):
-            #     x = warp[0][i].permute(1, 2, 0) * 255
-            #     x = x.detach().cpu().numpy().astype(np.uint8)
-            #     cv2.imwrite(f'xs_{i}.png', x)
+            # with torch.no_grad():
+            #     dst_cs = dst_cs * mask
+
+            if global_step % 500 == 0:
+                x = dst_cs[0].permute(1, 2, 0) * 255
+                x = x.detach().cpu().numpy().astype(np.uint8)
+                cv2.imwrite('c_tgt.png', x)
+                
+                x = pred[0].permute(1, 2, 0) * 255
+                x = x.detach().cpu().numpy().astype(np.uint8)
+                cv2.imwrite('c_prd.png', x)
+                # for i in range(warp.shape[1]):
+                #     x = warp[0][i].permute(1, 2, 0) * 255
+                #     x = x.detach().cpu().numpy().astype(np.uint8)
+                #     cv2.imwrite(f'xs_{i}.png', x)
 
             loss_l1 = l1(pred, dst_cs)
             loss_p = ploss(pred, dst_cs)

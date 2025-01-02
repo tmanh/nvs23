@@ -102,11 +102,9 @@ class Fusion(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
-        self.gru = GRUUNet()
         self.fuse = VFBlock(67)
 
     def forward(self, prjs):
         d = prjs[0][:, :, -1:]
-        # out, _ = self.gru(prjs)
         out = self.fuse(prjs[0], d)
         return out

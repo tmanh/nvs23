@@ -218,7 +218,7 @@ class MultiViewAttentionFusion(nn.Module):     # NOTE: Spatial attention (MLP st
         
         # combine heads out
         att = self.view_attend(self.to_out(out))
-        mask = (d > 0).float().permute(0, 3, 4, 1, 2).view(N * H * W, V, -1)
+        mask = (d > 0).float().permute(0, 3, 4, 1, 2).reshape(N * H * W, V, -1)
         att = att * mask
         att = att / (att.sum(dim=1, keepdim=True) + 1e-7)
         out = att * x
