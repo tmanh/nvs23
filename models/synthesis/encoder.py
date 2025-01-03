@@ -114,28 +114,9 @@ class ConvNeXtLargeMultiScale(nn.Module):
         features.append(x.view(B, V, *x.shape[1:]))
 
         return features
-    
-
-class ConvNeXt2LargeMultiScale(nn.Module):
-    def __init__(self):
-        super(ConvNeXt2LargeMultiScale, self).__init__()
-        # Load the pretrained ConvNeXt_Large model
-        self.base_model = convnextv2_huge()
-        sd = torch.load('convnextv2_huge_22k_512_ema.pt', weights_only=False)['model']
-        self.base_model.load_state_dict(sd)
-
-    def forward(self, x, B, V):
-        features = []
-
-        for i in range(4):
-            x = self.base_model.downsample_layers[i](x)
-            x = self.base_model.stages[i](x)
-            features.append(x.view(B, V, *x.shape[1:]))
-
-        return features
 
 
-class SwinColorFeats(nn.Module):
+class ColorFeats(nn.Module):
     def __init__(self):
         super().__init__()
         

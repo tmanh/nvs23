@@ -14,7 +14,7 @@ from models.losses.multi_view import *
 
 from models.projection.z_buffer_manipulator import Screen_PtsManipulator
 
-from models.synthesis.encoder import SwinColorFeats
+from models.synthesis.encoder import ColorFeats
 
 import kornia as K
 
@@ -150,7 +150,7 @@ class BaseModule(nn.Module):
         self.init_decoder()
 
     def init_color_encoder(self):
-        self.encoder = SwinColorFeats()
+        self.encoder = ColorFeats()
         self.encoder.freeze()
     
     def init_renderer(self):
@@ -191,7 +191,6 @@ class BaseModule(nn.Module):
         warped = []
         with torch.no_grad():
             feats = self.encoder(colors)
-
             prj_feats = []
             prj_depths = []
             for fs in feats:
