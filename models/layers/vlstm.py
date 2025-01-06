@@ -15,11 +15,11 @@ from __future__ import annotations
 import torch.nn as nn
 import torch
 import torch.nn.functional as F 
-from timm.models.layers import trunc_normal_
+from timm.layers import trunc_normal_
 import math
 
 # Load model directly
-from models.layers.vision_lstm.vision_lstm2 import ViLBlockPair
+from models.layers.vision_lstm.dvision_lstm2 import DViLBlockPair
 
 
 class LayerNorm(nn.Module):
@@ -52,109 +52,36 @@ class LayerNorm(nn.Module):
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+    def __init__(self, in_dim, out_dim=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc1 = nn.Linear(in_dim, out_dim)
         self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
 
     def forward(self, x):
         x = self.fc1(x)
         x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
         return x
-    
-
-class ViLViewLayer(nn.Module):
-    def __init__(self, dim, hidden, drop=0., act_layer=nn.GELU):
-        super().__init__()
-        self.dim = dim
-
-        self.in_mlp = Mlp(
-            in_features=dim,
-            hidden_features=dim,
-            out_features=hidden,
-            act_layer=act_layer,
-            drop=drop
-        )
-
-        self.mamba = nn.Sequential(
-            ViLBlockPair(
-                dim=hidden, # Model dimension d_model
-            ),
-        )
-
-        self.out_mlp = Mlp(
-            in_features=hidden,
-            hidden_features=hidden,
-            out_features=dim,
-            act_layer=act_layer,
-            drop=drop
-        )
-
-        self.apply(self._init_weights)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-        elif isinstance(m, nn.Conv2d):
-            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-            fan_out //= m.groups
-            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
-            if m.bias is not None:
-                m.bias.data.zero_()
-
-    def forward(self, x):
-        B, nf, C, H, W = x.shape
-        self.mamba.nframes = nf
-
-        assert C == self.dim
-        x_flat = x.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
-
-        x_flat_prj = self.in_mlp(x_flat)
-        x_seq_prj = self.mamba(x_flat_prj)
-
-        out = x_flat + self.out_mlp(x_seq_prj)
-        out = out.view(B, H, W, nf, C).permute(0, 3, 4, 1, 2)
-
-        return out
 
 
 class ViLViewFuseLayer(nn.Module):
-    def __init__(self, dim, hidden, drop=0., act_layer=nn.GELU):
+    def __init__(self, dim):
         super().__init__()
         self.dim = dim
 
-        self.in_mlp = Mlp(
-            in_features=dim,
-            hidden_features=dim,
-            out_features=hidden,
-            act_layer=act_layer,
-            drop=drop
+        depth = 1
+        self.blocks = nn.ModuleList(
+            [
+                DViLBlockPair(
+                    dim=dim,
+                    num_blocks=depth * 2,
+                )
+                for _ in range(depth)
+            ],
         )
 
-        self.mamba = nn.Sequential(
-            ViLBlockPair(
-                dim=hidden, # Model dimension d_model
-            ),
-        )
-
-        self.out_mlp = Mlp(
-            in_features=hidden,
-            hidden_features=hidden,
-            out_features=dim + 1,
-            act_layer=act_layer,
-            drop=drop
+        self.m_in = nn.Sequential(
+            nn.Conv2d(1, dim, kernel_size=7, padding=3),
+            nn.ReLU(inplace=True)
         )
 
         self.apply(self._init_weights)
@@ -174,20 +101,43 @@ class ViLViewFuseLayer(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-    def forward(self, x):
+    def forward(self, x, m):
         B, nf, C, H, W = x.shape
-        self.mamba.nframes = nf
 
-        assert C == self.dim
-        x_flat = x.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
+        m = m.view(B * nf, 1, H, W)
+        m = self.m_in(m)
+        m = m.view(B, nf, C, H, W)
+        m_seq = m.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
+        x_seq = x.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
+        for bb in self.blocks:
+            x_seq = x_seq + bb(x_seq, m_seq)
+        return x_seq.contiguous().view(-1, H, W, C).permute(0, 3, 1, 2)
+    
 
-        x_flat_prj = self.in_mlp(x_flat)
-        x_seq_prj = self.mamba(x_flat_prj)
-        alpha_beta = self.out_mlp(x_seq_prj)
+class ViLViewMergeLayer(ViLViewFuseLayer):
+    def __init__(self, dim):
+        super().__init__(dim)
 
-        alpha = F.softmax(alpha_beta[:, :, -1:], dim=1)
+        self.m_out = nn.Sequential(
+            nn.Linear(dim * 2, dim),
+            nn.Softmax(dim=1)
+        )
 
-        out = torch.sum(alpha * (x_flat + alpha_beta[:, :, :-1]), dim=1)
-        out = out.view(-1, H, W, C).permute(0, 3, 1, 2)
+        self.apply(self._init_weights)
 
-        return out
+    def forward(self, x, m):
+        B, nf, C, H, W = x.shape
+
+        m = m.view(B * nf, 1, H, W)
+        m = self.m_in(m)
+        m = m.view(B, nf, C, H, W)
+        m_seq = m.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
+        x_seq = x.permute(0, 3, 4, 1, 2).reshape(B * H * W, nf, C)
+        for bb in self.blocks:
+            x_seq = x_seq + bb(x_seq, m_seq)
+        
+        m_seq = self.m_out(torch.cat([x_seq, m_seq], dim=-1))
+        
+        out = torch.sum(x_seq * m_seq, dim=1)
+    
+        return out.contiguous().view(-1, H, W, C).permute(0, 3, 1, 2)

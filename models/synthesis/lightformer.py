@@ -27,7 +27,7 @@ class Decoder(nn.Module):
 
         self.out = nn.Conv2d(64, 3, 3, 1, 1)
         self.up = nn.Sequential(
-            nn.Conv2d(67, 64 * 4, 3, 1, 1, bias=False),
+            nn.Conv2d(64, 64 * 4, 3, 1, 1, bias=False),
             nn.PixelShuffle(2),
             nn.GELU(),
         )

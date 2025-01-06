@@ -109,7 +109,7 @@ def main(args) -> None:
             src_Rts = src_Rts.float().to(device)
             
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
-            pred, mask, merged_clr, merged_dpt, warp = renderer(
+            pred, mask, warp = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
@@ -136,9 +136,7 @@ def main(args) -> None:
 
             loss_l1 = l1(pred, dst_cs)
             loss_p = ploss(pred, dst_cs)
-            loss_rpj = l1(merged_clr, F.interpolate(dst_cs, size=merged_clr.shape[-2:], mode='bilinear'))
-            loss_dpt = l1(merged_dpt, F.interpolate(dst_ds.squeeze(1), size=merged_dpt.shape[-2:], mode='nearest'))
-            loss = loss_l1 + loss_p + loss_rpj + loss_dpt
+            loss = loss_l1 + loss_p
 
             opt.zero_grad()
             accelerator.backward(loss)

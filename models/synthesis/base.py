@@ -16,7 +16,7 @@ from models.projection.z_buffer_manipulator import Screen_PtsManipulator
 
 from models.synthesis.encoder import ColorFeats
 
-import kornia as K
+# import kornia as K
 
 
 def fill_holes(images, depths):
@@ -184,100 +184,87 @@ class BaseModule(nn.Module):
 
         return sK
 
-    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+    def extract_src_feats(self, colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs):
         ori_shape = colors.shape[-2:]
-        B, V = colors.shape[:2]
 
-        warped = []
         with torch.no_grad():
             feats = self.encoder(colors)
             prj_feats = []
             prj_depths = []
-            for fs in feats:
-                fs = torch.cat(
-                    [
-                        fs,
-                        F.interpolate(
-                            colors.view(B * V, -1, *ori_shape),
-                            size=fs.shape[-2:], mode='bilinear',
-                            align_corners=True, antialias=True
-                        ).view(B,  V, -1, *fs.shape[-2:])
-                    ],
-                    dim=2
-                )
-                prj_fs, prj_pts = self.project(
+            for i, fs in enumerate([colors, *feats]):
+                prj_fs, prj_pts = self.warp_all_views(
                     fs, depths, ori_shape,
                     self.compute_K(K, ori_shape, fs.shape[-2:]),
-                    src_RTinvs, src_RTs, dst_RTinvs, dst_RTs
+                    src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
+                    radius=self.opt.model.radius if i == 0 else self.opt.model.fradius,
+                    max_alpha=False if i == 0 else self.opt.model.fradius # False if i == 0 else self.opt.model.fradius
                 )
 
                 prj_feats.append(prj_fs)     # N, V, C, H, W
                 prj_depths.append(prj_pts)   # N, V, C, H, W
 
-                if visualize:
-                    warped.append(prj_fs[:, :, -3:])
-
-            # warped = None
-            prj_clr, prj_pts = self.project(
-                colors, depths, ori_shape,
-                K,
-                src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
-                radius=3.0
-            )
-            warped.append(prj_clr)
-            # warped = (warped, merge_reprojected_views(prj_clr, prj_pts))
-
-            # N, C, V, H, W
-            prjs = [torch.cat([vf, df], dim=2) for vf, df in zip(prj_feats, prj_depths)]
+            return prj_feats, prj_depths
         
-        merged_fs = self.merge_net(prjs)
+    def extract_prj_feats(self, prj_colors):
+        with torch.no_grad():
+            return self.encoder(prj_colors)
 
-        mask = (torch.sum(prj_pts, dim=1) > 0).float()
+    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+        prj_src_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
+        prj_feats = self.extract_prj_feats(prj_src_feats[0])
 
-        final = self.out(merged_fs[:, :-1])
-        merged_clr = merged_fs[:, -4:-1]
-        merged_dpt = merged_fs[:, -1:]
+        merged_fs = self.merge_net(prj_feats, prj_src_feats[1:], prj_depths[1:])
 
-        return final, mask, merged_clr, merged_dpt, warped  # self.out(merged_fs), warped
+        mask = (torch.sum(prj_depths[0], dim=1) > 0).float()
 
-    def view_render(
+        final = self.out(merged_fs)
+
+        return final, mask, prj_src_feats[0]  # self.out(merged_fs), warped
+
+    def rendering_all_views(
             self, src_feats, src_pts,
             K, K_inv,
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
-            H, W, radius
+            H, W, radius, max_alpha
         ):
         prj_feats = []
         prj_depths = []
 
         _, V, _, _ = src_feats.shape
         for i in range(V):
-            pts_3D_nv = self.pts_transformer.view_to_world_coord(
-                src_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
-            )
-
-            src_fs = src_feats[:, i:i + 1]
-            sampler = self.pts_transformer.world_to_view(
-                pts_3D_nv,
-                K,
-                K_inv,
-                dst_RTs.view(-1, 4, 4),
-                dst_RTinvs.view(-1, 4, 4),
-                H, W
-            )
-            pointcloud = sampler.permute(0, 2, 1).contiguous()
-            src_fs = src_fs.view(-1, *src_fs.shape[2:])
-
-            prj_fs, prj_ds = self.pts_transformer.splatter(
-                pointcloud, src_fs, image_size=(H, W), depth=True, radius=radius
-            )
+            prj_fs, prj_ds = self.splatting(src_feats, src_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, H, W, radius, max_alpha, i)
 
             prj_depths.append(prj_ds)
             prj_feats.append(prj_fs)
 
         return torch.stack(prj_feats, 1), torch.stack(prj_depths, 1)
 
-    def project(
-            self, feats, depths, ori_shape, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, radius=None,
+    def splatting(self, src_feats, src_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, H, W, radius, max_alpha, i):
+        pts_3D_nv = self.pts_transformer.view_to_world_coord(
+            src_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
+        )
+
+        src_fs = src_feats[:, i:i + 1]
+        sampler = self.pts_transformer.world_to_view(
+            pts_3D_nv,
+            K,
+            K_inv,
+            dst_RTs.view(-1, 4, 4),
+            dst_RTinvs.view(-1, 4, 4),
+            H, W
+        )
+
+        pointcloud = sampler.permute(0, 2, 1).contiguous()
+        src_fs = src_fs.view(-1, *src_fs.shape[2:])
+
+        prj_fs, prj_ds = self.pts_transformer.splatter(
+            pointcloud, src_fs, image_size=(H, W), depth=True, radius=radius, max_alpha=max_alpha
+        )
+        
+        return prj_fs,prj_ds
+
+    def warp_all_views(
+            self, feats, depths, ori_shape, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, radius=None, max_alpha=False,
         ):
         bs, nv, c, hf, wf = feats.shape
         hc, wc = ori_shape
@@ -289,12 +276,12 @@ class BaseModule(nn.Module):
         feats = feats.contiguous().view(bs, nv, c, -1)
         depths = depths.contiguous().view(bs, nv, 1, -1)
 
-        prj_feats, prj_depths = self.view_render(
+        prj_feats, prj_depths = self.rendering_all_views(
             feats, depths,
             K, torch.inverse(K),
             src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
             hf, wf,
-            radius
+            radius, max_alpha
         )
 
         return prj_feats, prj_depths

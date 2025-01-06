@@ -1,7 +1,8 @@
 model:
   H: 512  # 512
   W: 384  # 
-  radius: 0.75
+  radius: 1.5
+  fradius: 1.5
   rad_pow: 2
   pp_pixel: 8
   accumulation: "wsumnorm"
@@ -30,4 +31,4 @@ train:
   ckpt_every: 5000
   image_every: 10000
   val_every: 10000
-  resume: exp/checkpoints/0010000.pt
+  resume: ~ #exp/checkpoints/0010000.pt

@@ -4,13 +4,95 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.layers.osa import VFBlock
-from models.layers.vlstm import ViLViewFuseLayer, ViLViewLayer
+from models.layers.cat import CrossAttention
+from models.layers.osa import Block_Attention, BlockCAT, VFBlock
+from models.layers.vlstm import ViLViewFuseLayer, ViLViewMergeLayer
 from models.layers.weight_init import trunc_normal_
 from models.layers.gruunet import GRUUNet
 
 
 from .osa_utils import *
+
+
+class PixelShuffleUpsample(nn.Module):
+    def __init__(self, in_channels, out_channels, scale_factor):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels * (scale_factor ** 2), kernel_size=3, padding=1)
+        self.pixel_shuffle = nn.PixelShuffle(scale_factor)
+
+    def forward(self, x, out_shape):
+        h, w = out_shape
+        x = self.conv(x)
+        x = self.pixel_shuffle(x)
+        return x[:, :, :h, :w]
+
+
+class FusionInner(nn.Module):
+    def __init__(self, dim) -> None:
+        super().__init__()
+        self.fuse_cat = BlockCAT(dim)
+        self.fuse = ViLViewFuseLayer(dim)
+
+    def forward(self, prj_feats, prj_src_feats, prj_depths):
+        B, V, C, H, W = prj_src_feats.shape
+        feats = self.fuse_cat(
+            prj_src_feats.view(-1, C, H, W),
+            prj_feats.view(-1, C, H, W),
+            prj_depths.view(-1, 1, H, W),
+        )
+        return self.fuse(feats.view(B, V, C, H, W), prj_depths)
+
+
+class FusionOuter(nn.Module):
+    def __init__(self, dim, prev_dim) -> None:
+        super().__init__()
+        self.fuse_cat = BlockCAT(dim)
+        self.fuse_layer = nn.Sequential(
+            nn.Conv2d(2 * dim, dim, kernel_size=1, padding=0),
+            nn.GELU(),
+            Block_Attention(dim),
+        )
+        self.fuse = ViLViewFuseLayer(dim)
+        self.up = PixelShuffleUpsample(prev_dim, dim, 2)
+
+    def forward(self, prev_feats, prj_feats, prj_src_feats, prj_depths):
+        B, V, C, H, W = prj_src_feats.shape
+        prj_src_feats = prj_src_feats.view(-1, C, H, W)
+
+        prev_feats = self.up(prev_feats, [H, W])
+        prj_feats = self.fuse_layer(torch.cat([prev_feats, prj_src_feats], dim=1))
+        feats = self.fuse_cat(
+            prj_src_feats.view(-1, C, H, W),
+            prj_feats.view(-1, C, H, W),
+            prj_depths.view(-1, 1, H, W),
+        )
+        return self.fuse(feats.view(B, V, C, H, W), prj_depths)
+
+
+class Merger(nn.Module):
+    def __init__(self, dim, prev_dim) -> None:
+        super().__init__()
+        self.fuse_cat = BlockCAT(dim)
+        self.fuse_layer = nn.Sequential(
+            nn.Conv2d(2 * dim, dim, kernel_size=1, padding=0),
+            nn.GELU(),
+            Block_Attention(dim),
+        )
+        self.fuse = ViLViewMergeLayer(dim)
+        self.up = PixelShuffleUpsample(prev_dim, dim, 2)
+
+    def forward(self, prev_feats, prj_feats, prj_src_feats, prj_depths):
+        B, V, C, H, W = prj_src_feats.shape
+        prj_src_feats = prj_src_feats.view(-1, C, H, W)
+
+        prev_feats = self.up(prev_feats, [H, W])
+        prj_feats = self.fuse_layer(torch.cat([prev_feats, prj_src_feats], dim=1))
+        feats = self.fuse_cat(
+            prj_src_feats.view(-1, C, H, W),
+            prj_feats.view(-1, C, H, W),
+            prj_depths.view(-1, 1, H, W),
+        )
+        return self.fuse(feats.view(B, V, C, H, W), prj_depths)
 
 
 class Fusion(nn.Module):
@@ -38,73 +120,18 @@ class Fusion(nn.Module):
             if m.bias is not None:
                 m.bias.data.zero_()
 
-    def __init__x(self) -> None:
-        super().__init__()
-
-        self.fuse5 = ViLViewLayer(2816 + 1)
-        
-        self.up4 = nn.Sequential(
-            nn.Conv2d(2816 + 1, (1408 + 1) * 4, 1, 1, 0, bias=False),
-            nn.PixelShuffle(2),
-        )
-        self.fuse4 = ViLViewLayer(1408 + 1)
-
-        self.up3 = nn.Sequential(
-            nn.Conv2d(1408 + 1, (704 + 1) * 4, 1, 1, 0, bias=False),
-            nn.PixelShuffle(2),
-        )
-        self.fuse3 = ViLViewLayer(704 + 1)
-
-        self.up2 = nn.Sequential(
-            nn.Conv2d(704 + 1, (352 + 1) * 4, 1, 1, 0, bias=False),
-            nn.PixelShuffle(2),
-        )
-        self.fuse2 = ViLViewLayer(352 + 1)
-
-        self.up1 = nn.Sequential(
-            nn.Conv2d(352 + 1, 128 * 4, 1, 1, 0, bias=False),
-            nn.PixelShuffle(2),
-        )
-
-        self.apply(self._init_weights)
-
-    def forwardx(self, prjs):
-        # torch.Size([1, 2, 64, 256, 192])
-        # torch.Size([1, 2, 256, 128, 96])
-        # torch.Size([1, 2, 512, 64, 48])
-        # torch.Size([1, 2, 1024, 32, 24])
-        # torch.Size([1, 2, 2048, 16, 12])
-        prev_prj = self.up4(
-            self.fuse5(prjs[3])
-        ).unsqueeze(1)  # N, V, C, H, W
-        
-        prev_prj = self.up3(
-            self.fuse4(
-                torch.cat([prev_prj, prjs[2]], dim=1)
-            )
-        ).unsqueeze(1)  # N, V, C, H, W
-        
-        prev_prj = self.up2(
-            self.fuse3(
-                torch.cat([prev_prj, prjs[1]], dim=1)
-            )
-        ).unsqueeze(1)  # N, V, C, H, W
-
-        prev_prj = self.up1(
-            self.fuse2(
-                torch.cat([prev_prj, prjs[0]], dim=1)
-            )
-        )
-
-        # torch.mean(prjs[0], dim=1)[:, :-1]
-        return prev_prj
-    
     def __init__(self) -> None:
         super().__init__()
+        self.fuse5 = FusionInner(2048)
+        self.fuse4 = FusionOuter(1024, 2048)
+        self.fuse3 = FusionOuter(512, 1024)
+        self.fuse2 = FusionOuter(256, 512)
+        self.fuse1 = Merger(64, 256)
 
-        self.fuse = VFBlock(67)
-
-    def forward(self, prjs):
-        d = prjs[0][:, :, -1:]
-        out = self.fuse(prjs[0], d)
-        return out
+    def forward(self, prj_feats, prj_src_feats, prj_depths):
+        f5 = self.fuse5(prj_feats[-1], prj_src_feats[-1], prj_depths[-1])
+        f4 = self.fuse4(f5, prj_feats[-2], prj_src_feats[-2], prj_depths[-2])
+        f3 = self.fuse3(f4, prj_feats[-3], prj_src_feats[-3], prj_depths[-3])
+        f2 = self.fuse2(f3, prj_feats[-4], prj_src_feats[-4], prj_depths[-4])
+        f1 = self.fuse1(f2, prj_feats[-5], prj_src_feats[-5], prj_depths[-5])
+        return f1

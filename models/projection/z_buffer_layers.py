@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 
 from pytorch3d.structures import Pointclouds
@@ -36,7 +37,7 @@ class RasterizePointsXYsBlending(nn.Module):
         self.points_per_pixel = points_per_pixel
         self.opts = opts
 
-    def forward(self, pts3D, src, image_size, depth=False, radius=None):
+    def forward(self, pts3D, src, image_size, depth=False, radius=None, max_alpha=False):
         if radius is None:
             radius = self.radius
 
@@ -92,8 +93,10 @@ class RasterizePointsXYsBlending(nn.Module):
             (1 - dist.clamp(max=1, min=1e-3).pow(0.5))
             .permute(0, 3, 1, 2)
         )
-        # print(points_idx.permute(0, 3, 1, 2).long().shape, alphas.shape, pts3D.features_packed().permute(1,0).shape)
-        # exit()
+        z_buf = z_buf.permute(0, 3, 1, 2)
+        alphas = alphas * (z_buf >= 0)
+        if max_alpha:
+            alphas = (alphas == torch.max(alphas, dim=1)[0].unsqueeze(1)).float()
         if self.opts.model.accumulation == 'alphacomposite':
             transformed_src_alphas = compositing.alpha_composite(
                 points_idx.permute(0, 3, 1, 2).long(),
@@ -112,13 +115,12 @@ class RasterizePointsXYsBlending(nn.Module):
                 alphas,
                 pts3D.features_packed().permute(1,0),
             )
-
         if depth is False:
             return transformed_src_alphas
 
         w_normed = alphas * (points_idx.permute(0,3,1,2) >= 0).float()
         w_normed = w_normed / w_normed.sum(dim=1, keepdim=True).clamp(min=1e-9)
-        z_weighted = z_buf.permute(0,3,1,2).contiguous() * w_normed.contiguous()
+        z_weighted = z_buf.contiguous() * w_normed.contiguous()
         z_weighted = z_weighted.sum(dim=1, keepdim=True)
         
         return transformed_src_alphas, z_weighted

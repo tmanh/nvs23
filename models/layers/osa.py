@@ -304,7 +304,6 @@ class Block_Attention(nn.Module):     # NOTE: Spatial attention (Conv2D style)
 
         self.qkv = nn.Conv2d(dim, dim*3, kernel_size=1, bias=bias)
         self.qkv_dwconv = nn.Conv2d(dim*3, dim*3, kernel_size=3, stride=1, padding=1, groups=dim*3, bias=bias)
-        
 
         self.attend = nn.Sequential(
             nn.Softmax(dim = -1),
@@ -313,13 +312,20 @@ class Block_Attention(nn.Module):     # NOTE: Spatial attention (Conv2D style)
 
         self.to_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
 
-
     def forward(self, x):
         # project for queries, keys, values
         b, c, h, w = x.shape
 
         qkv = self.qkv_dwconv(self.qkv(x))
         q, k, v = qkv.chunk(3, dim=1) 
+
+        pad_r = (self.ps - w % self.ps) % self.ps
+        pad_b = (self.ps - h % self.ps) % self.ps
+
+        q = F.pad(q, (0, pad_r, 0, pad_b))
+        k = F.pad(k, (0, pad_r, 0, pad_b))
+        v = F.pad(v, (0, pad_r, 0, pad_b))
+        h_pad, w_pad = q.shape[-2], q.shape[-1]
 
         # split heads
         q, k, v = map(lambda t: rearrange(t, 'b (h d) (x w1) (y w2) -> (b x y) h (w1 w2) d', h = self.heads, w1=self.ps, w2=self.ps), (q, k, v))
@@ -337,9 +343,97 @@ class Block_Attention(nn.Module):     # NOTE: Spatial attention (Conv2D style)
         out = einsum('b h i j, b h j d -> b h i d', attn, v)
 
         # merge heads
-        out = rearrange(out, '(b x y) head (w1 w2) d -> b (head d) (x w1) (y w2)', x=h//self.ps, y=w//self.ps, head=self.heads, w1 = self.ps, w2 = self.ps)
+        out = rearrange(out, '(b x y) head (w1 w2) d -> b (head d) (x w1) (y w2)', x=h_pad//self.ps, y=w_pad//self.ps, head=self.heads, w1 = self.ps, w2 = self.ps)
 
         out = self.to_out(out)
+
+        if pad_r > 0 or pad_b > 0:
+            out = out[:, :, :h, :w].contiguous()
+        
+        return out + x
+    
+
+class BlockCAT(nn.Module):     # NOTE: Spatial attention (Conv2D style)
+    def __init__(
+        self,
+        dim,
+        dim_head = 32,
+        bias=False, 
+        dropout = 0.,
+        window_size = 7,
+    ):
+        super().__init__()
+        assert (dim % dim_head) == 0, 'dimension should be divisible by dimension per head'
+
+        self.heads = dim // dim_head
+        self.ps = window_size
+        self.scale = dim_head ** -0.5
+
+        self.q = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+        self.k = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+        self.v = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+
+        self.qm = nn.Conv2d(1, dim, kernel_size=7, bias=bias, padding=3)
+        self.km = nn.Conv2d(1, dim, kernel_size=7, bias=bias, padding=3)
+
+        self.attend = nn.Sequential(
+            nn.Softmax(dim = -1),
+            nn.Dropout(dropout)
+        )
+
+        self.to_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
+
+    def forward(self, x, y, m=None):
+        # project for queries, keys, values
+        b, c, h, w = x.shape
+
+        q = self.q(x)
+        k = self.k(y)
+        v = self.v(y)
+
+        if m is not None:
+            qm = self.qm(m)
+            km = self.km(m)
+
+        pad_r = (self.ps - w % self.ps) % self.ps
+        pad_b = (self.ps - h % self.ps) % self.ps
+
+        q = F.pad(q, (0, pad_r, 0, pad_b))
+        k = F.pad(k, (0, pad_r, 0, pad_b))
+        v = F.pad(v, (0, pad_r, 0, pad_b))
+        if m is not None:
+            qm = F.pad(qm, (0, pad_r, 0, pad_b))
+            km = F.pad(km, (0, pad_r, 0, pad_b))
+        h_pad, w_pad = q.shape[-2], q.shape[-1]
+
+        # split heads
+        q, k, v = map(lambda t: rearrange(t, 'b (h d) (x w1) (y w2) -> (b x y) h (w1 w2) d', h = self.heads, w1=self.ps, w2=self.ps), (q, k, v))
+        if m is not None:
+            qm, km = map(lambda t: rearrange(t, 'b (h d) (x w1) (y w2) -> (b x y) h (w1 w2) d', h = self.heads, w1=self.ps, w2=self.ps), (qm, km))
+
+        # scale
+        q = q * self.scale
+
+        # sim
+        sim = einsum('b h i d, b h j d -> b h i j', q, k)
+        if m is not None:
+            sim_m = einsum('b h i d, b h j d -> b h i j', qm, km)
+            sim = sim * sim_m
+
+        # attention
+        attn = self.attend(sim)
+
+        # aggregate
+        out = einsum('b h i j, b h j d -> b h i d', attn, v)
+
+        # merge heads
+        out = rearrange(out, '(b x y) head (w1 w2) d -> b (head d) (x w1) (y w2)', x=h_pad//self.ps, y=w_pad//self.ps, head=self.heads, w1 = self.ps, w2 = self.ps)
+
+        out = self.to_out(out)
+
+        if pad_r > 0 or pad_b > 0:
+            out = out[:, :, :h, :w].contiguous()
+
         return out
 
 
