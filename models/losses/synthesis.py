@@ -2,9 +2,47 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from models.losses.ssim import ssim
 from models.losses.architectures import VGG19
+
+
+def dilate_mask(mask, kernel_size=3):
+    """
+    Apply dilation to a mask.
+
+    Args:
+        mask (torch.Tensor): Input mask of shape (N, 1, H, W), with 0s and 1s.
+        kernel_size (int): Size of the dilation kernel.
+
+    Returns:
+        torch.Tensor: Dilated mask of the same shape as input.
+    """
+    # Create a circular kernel for dilation
+    padding = kernel_size // 2
+    kernel = torch.ones((1, 1, kernel_size, kernel_size), device=mask.device)
+    
+    # Dilation is a max-pooling operation using the kernel
+    dilated_mask = F.conv2d(mask.float(), kernel, padding=padding) > 0
+    return dilated_mask.float()
+
+
+def masked_l1_loss(pred, target, mask):
+    """
+    Compute L1 loss with a mask.
+
+    Args:
+        pred (torch.Tensor): Predicted tensor.
+        target (torch.Tensor): Ground truth tensor.
+        mask (torch.Tensor): Mask of shape (N, 1, H, W), where 1 indicates valid regions.
+
+    Returns:
+        torch.Tensor: Masked L1 loss.
+    """
+    loss = torch.abs(pred - target)
+    masked_loss = (loss * mask).sum() / mask.sum()
+    return masked_loss
 
 
 class SynthesisLoss(nn.Module):
@@ -85,17 +123,18 @@ class L2LossWarpper(nn.Module):
 # Adapted from SPADE's implementation
 # (https://github.com/NVlabs/SPADE/blob/master/models/networks/loss.py)
 class PerceptualLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, epsilon=1e-6, h=0.5):
         super().__init__()
         self.model = VGG19(
             requires_grad=False,
         )  # Set to false so that this part of the network is frozen
         self.criterion = nn.L1Loss()
-        self.weights = [1.0 / 32, 1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0]
         self.mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1).cuda()  # Reshape for broadcasting
         self.std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1).cuda()    # Reshape for broadcasting
+        self.epsilon = epsilon
+        self.h = h
 
-    def forward(self, pred_img, gt_img):
+    def forward(self, pred_img, gt_img, mask):
         pred_img = (pred_img - self.mean) / self.std
         gt_img = (gt_img - self.mean) / self.std
 
@@ -104,5 +143,58 @@ class PerceptualLoss(nn.Module):
 
         # Collect the losses at multiple layers (need unsqueeze in
         # order to concatenate these together)
-        loss = sum(self.weights[i] * self.criterion(pred_fs[i], gt_fs[i]) for i in range(len(gt_fs)))
-        return loss * 0.25
+        loss = sum(
+            self.compute_contextual_loss(
+                self.compute_similarity(pred_fs[i], gt_fs[i]),
+                mask 
+            ) for i in range(len(gt_fs))
+        )
+        return loss
+    
+    def compute_similarity(self, pred_features, target_features):
+        """
+        Compute cosine similarity between features.
+
+        Args:
+            pred_features (torch.Tensor): Predicted feature map of shape (N, C, H, W).
+            target_features (torch.Tensor): Target feature map of the same shape.
+
+        Returns:
+            torch.Tensor: Cosine similarity of shape (N, H, W, H, W).
+        """
+        # Normalize feature maps along the channel dimension
+        pred_norm = pred_features / (torch.norm(pred_features, dim=1, keepdim=True) + self.epsilon)
+        target_norm = target_features / (torch.norm(target_features, dim=1, keepdim=True) + self.epsilon)
+
+        # Compute cosine similarity (N, H, W)
+        cosine_similarity = torch.sum(pred_norm * target_norm, dim=1)  # Dot product over channels
+        return cosine_similarity
+    
+    def compute_contextual_loss(self, cosine_similarity, mask=None):
+        """
+        Compute contextual loss using similarity map.
+
+        Args:
+            cosine_similarity (torch.Tensor): Similarity map of shape (N, H, W, H, W).
+            mask (torch.Tensor): Optional mask of shape (N, 1, H, W).
+
+        Returns:
+            torch.Tensor: Contextual loss.
+        """
+        sim_exp = torch.exp((cosine_similarity - 1) / self.h)  # Exponential transformation
+        sim_exp_sum = torch.sum(sim_exp, dim=(1, 2), keepdim=True)  # Normalize over spatial dimensions
+        contextual_similarity = sim_exp / (sim_exp_sum + self.epsilon)  # Normalize to sum to 1
+
+        # Contextual loss: maximize similarity
+        cx_loss = -torch.log(contextual_similarity + self.epsilon)
+
+        # Apply mask if provided
+        if mask is not None:
+            _mask = F.interpolate(mask, size=cx_loss.shape[-2:], align_corners=True, mode='bilinear')
+            cx_loss = cx_loss * _mask.squeeze(1)  # Apply mask (N, H, W)
+
+        # Average over valid pixels
+        if mask is not None:
+            return cx_loss.sum() / (_mask.sum() + self.epsilon)
+        else:
+            return cx_loss.mean()

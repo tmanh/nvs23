@@ -12,11 +12,15 @@ import torch.nn as nn
 
 
 class WideResNetMultiScale(nn.Module):
-    def __init__(self):
+    def __init__(self, depth=False):
         super(WideResNetMultiScale, self).__init__()
         # Load pretrained WideResNet50_2
-        resnet50 = models.wide_resnet50_2(weights=models.Wide_ResNet50_2_Weights.IMAGENET1K_V2)
-        
+        if not depth:
+            resnet50 = models.wide_resnet50_2(weights=models.Wide_ResNet50_2_Weights.IMAGENET1K_V2)
+        else:
+            resnet50 = models.wide_resnet50_2()
+            resnet50.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
         # Extract layers for different scales
         self.conv1 = nn.Sequential(
             resnet50.conv1,
@@ -35,16 +39,16 @@ class WideResNetMultiScale(nn.Module):
         # Extract multi-scale features
         features = []
         x = self.conv1(x)
-        features.append(x.view(B, V, *x.shape[1:]))
+        features.append(x)
         x = self.act_maxpool(x)
         x = self.layer1(x)
-        features.append(x.view(B, V, *x.shape[1:]))
+        features.append(x)
         x = self.layer2(x)
-        features.append(x.view(B, V, *x.shape[1:]))
+        features.append(x)
         x = self.layer3(x)
-        features.append(x.view(B, V, *x.shape[1:]))
+        features.append(x)
         x = self.layer4(x)
-        features.append(x.view(B, V, *x.shape[1:]))
+        features.append(x)
         return features
 
 
@@ -124,14 +128,62 @@ class ColorFeats(nn.Module):
         # self.backbone.load_pretrained()
         # self.backbone.eval()
 
-        self.backbone = WideResNetMultiScale()
+        self.backbone = WideResNetMultiScale(depth=False)
+
+        # Define decoder layers with PixelShuffle
+        self.u1 = nn.Sequential(
+            nn.Conv2d(2048, 1024 * 4, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(1024, 1024, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.u2 = nn.Sequential(
+            nn.Conv2d(1024 * 2, 512 * 4, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.u3 = nn.Sequential(
+            nn.Conv2d(512 * 2, 256 * 4, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.u4 = nn.Sequential(
+            nn.Conv2d(256 * 2, 64 * 4, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
+
+        self.u5 = nn.Sequential(
+            nn.Conv2d(64 * 2, 64 * 4, kernel_size=3, padding=1),
+            nn.PixelShuffle(2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+        )
 
     def forward(self, colors):
         B, V, C, H, W = colors.shape
         with torch.no_grad():
             x = colors.view(B * V, C, H, W)
-            features = self.backbone(x, B, V)
-        return features
+            feats = self.backbone(x, B, V)
+        
+        u1 = self.u1(feats[4])
+        u2 = self.u2(torch.cat([feats[3], u1[:, :, :feats[3].shape[-2], :feats[3].shape[-1]]], dim=1))
+        u3 = self.u3(torch.cat([feats[2], u2[:, :, :feats[2].shape[-2], :feats[2].shape[-1]]], dim=1))
+        u4 = self.u4(torch.cat([feats[1], u3[:, :, :feats[1].shape[-2], :feats[1].shape[-1]]], dim=1))
+        u5 = self.u5(torch.cat([feats[0], u4[:, :, :feats[0].shape[-2], :feats[0].shape[-1]]], dim=1))
+
+        return u5.view(B, V, -1, H, W)
     
     def freeze(self):
         self.backbone.eval()

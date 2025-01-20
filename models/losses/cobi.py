@@ -4,7 +4,71 @@ import torch
 import torch.nn as nn
 import models.losses.functional as F
 
-from .vgg import VGG19
+from .architectures import VGG19
+
+LOSS_TYPES = ['cosine', 'l1', 'l2']
+
+
+class ContextualLoss(nn.Module):
+    """
+    Creates a criterion that measures the contextual loss.
+
+    Parameters
+    ---
+    band_width : int, optional
+        a band_width parameter described as :math:`h` in the paper.
+    use_vgg : bool, optional
+        if you want to use VGG feature, set this `True`.
+    vgg_layer : str, optional
+        intermidiate layer name for VGG feature.
+        Now we support layer names:
+            `['relu1_2', 'relu2_2', 'relu3_4', 'relu4_4', 'relu5_4']`
+    """
+
+    def __init__(
+            self,
+            band_width: float = 0.5,
+            loss_type: str = 'cosine',
+            vgg_layer: str = 'relu3_4'
+        ):
+
+        super(ContextualLoss, self).__init__()
+
+        assert band_width > 0, 'band_width parameter must be positive.'
+        assert loss_type in LOSS_TYPES,\
+            f'select a loss type from {LOSS_TYPES}.'
+
+        self.band_width = band_width
+
+        self.vgg_model = VGG19()
+        self.vgg_layer = vgg_layer
+        self.register_buffer(
+            name='vgg_mean',
+            tensor=torch.tensor(
+                [[[0.485]], [[0.456]], [[0.406]]], requires_grad=False
+            )
+        )
+        self.register_buffer(
+            name='vgg_std',
+            tensor=torch.tensor(
+                [[[0.229]], [[0.224]], [[0.225]]], requires_grad=False
+            )
+        )
+
+    def forward(self, x, y, m):
+        x = x.sub(self.vgg_mean.detach()).div(self.vgg_std.detach())
+        y = y.sub(self.vgg_mean.detach()).div(self.vgg_std.detach())
+
+        # picking up vgg feature maps
+        fx = self.vgg_model(x)
+        fy = self.vgg_model(y)
+
+        loss = sum(
+            F.contextual_loss(_fx, _fy) for _fx, _fy in zip(fx, fy)
+        )
+
+
+        return loss
 
 
 class ContextualBilateralLoss(nn.Module):

@@ -10,6 +10,7 @@ __all__ = ['contextual_loss', 'contextual_bilateral_loss']
 
 def contextual_loss(x: torch.Tensor,
                     y: torch.Tensor,
+                    m: torch.Tensor = None,
                     band_width: float = 0.5,
                     loss_type: str = 'cosine'):
     """
@@ -39,8 +40,6 @@ def contextual_loss(x: torch.Tensor,
     assert x.size() == y.size(), 'input tensor must have the same size.'
     assert loss_type in LOSS_TYPES, f'select a loss type from {LOSS_TYPES}.'
 
-    N, C, H, W = x.size()
-
     if loss_type == 'cosine':
         dist_raw = compute_cosine_distance(x, y)
     elif loss_type == 'l1':
@@ -50,8 +49,12 @@ def contextual_loss(x: torch.Tensor,
 
     dist_tilde = compute_relative_distance(dist_raw)
     cx = compute_cx(dist_tilde, band_width)
-    cx = torch.mean(torch.max(cx, dim=1)[0], dim=1)  # Eq(1)
-    cx_loss = torch.mean(-torch.log(cx + 1e-5))  # Eq(5)
+    print(cx.shape, cx.min(), cx.max())
+    #cx = torch.mean(torch.max(cx, dim=1)[0], dim=1)  # Eq(1)
+    # print(cx.shape)
+    cx_loss = -torch.log(cx + 1e-5)
+    print(cx_loss.shape, cx.min(), cx.max())
+    exit()
 
     return cx_loss
 
@@ -145,11 +148,14 @@ def compute_cosine_distance(x, y):
     x_normalized = x_normalized.reshape(N, C, -1)  # (N, C, H*W)
     y_normalized = y_normalized.reshape(N, C, -1)  # (N, C, H*W)
 
+    cosine_sim = x_normalized * y_normalized
+
+    # TODO: cost too much mem for the searching
     # consine similarity
-    cosine_sim = torch.bmm(
-        x_normalized.transpose(1, 2),
-        y_normalized
-    )  # (N, H*W, H*W)
+    # cosine_sim = torch.bmm(
+    #     x_normalized.transpose(1, 2),
+    #     y_normalized
+    # )  # (N, H*W, H*W)
 
     # convert to distance
     dist = 1 - cosine_sim

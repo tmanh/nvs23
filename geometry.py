@@ -5,6 +5,8 @@ import argparse
 import time
 import glob
 
+import pickle
+
 import numpy as np
 import os.path as osp
 import torch.nn.functional as F
@@ -15,6 +17,7 @@ os.sys.path.append(os.path.abspath(os.path.join(BASE_DIR, "dust3r")))
 os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 
+from demo import get_3D_model_from_scene
 from dust3r.inference import inference
 from dust3r.model import AsymmetricCroCo3DStereo
 from dust3r.utils.device import to_numpy
@@ -33,6 +36,7 @@ def load_images(images, shape=(384, 512)):
     for path in images:
         if not path.endswith(('.jpg', '.jpeg', '.png', '.JPG')):
             continue
+        
         img = PIL.Image.open(path).convert('RGB')
         img = img.resize(shape, PIL.Image.Resampling.LANCZOS)
 
@@ -42,6 +46,35 @@ def load_images(images, shape=(384, 512)):
 
     print(f' (Found {len(imgs)} images)')
     return imgs
+
+
+def filter_images(path, images):
+    if 'arkitscenes_processed' not in path:
+        return images
+    
+    first_time = -1
+    list_chunks = []
+    chunk = []
+    for i, image in enumerate(images):
+        curr_time = float(os.path.splitext(os.path.basename(image))[0].split('_')[1])
+        
+        if first_time == -1:
+            first_time = curr_time
+            chunk.append(image)
+        elif curr_time - first_time < 1.75:
+            chunk.append(image)
+        elif i == len(images) - 1:
+            list_chunks.append(chunk.copy())
+            first_time = curr_time
+            chunk = []
+        else:
+            list_chunks.append(chunk.copy())
+            first_time = curr_time
+            chunk = []
+
+    list_chunks = [c for c in list_chunks if len(c) > 5]
+
+    return list_chunks
 
 
 def get_args_parser():
@@ -72,6 +105,25 @@ def get_image_list(path):
     return images
 
 
+def scan(path):
+    if 'arkitscenes_processed' in path:
+        return [osp.join(path, d, 'vga_wide') for d in os.listdir(path)]
+    return [path]
+
+
+def get_image_files(folder_path):
+    # Define supported image extensions
+    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+    
+    # List all files in the folder
+    all_files = os.listdir(folder_path)
+    
+    # Filter for image files
+    image_files = [os.path.join(folder_path, f) for f in all_files if os.path.splitext(f)[1].lower() in image_extensions]
+    
+    return image_files
+
+
 #--------------------------------------------------
 if __name__ == '__main__':
     parser = get_args_parser()
@@ -84,48 +136,66 @@ if __name__ == '__main__':
     lr = args.lr
     niter = args.niter
     n_views = args.n_views
-    img_base_path = args.img_base_path
+    img_base_path = 'datasets/arkitscenes_processed'
+    # img_base_path = 'mast3r/sample'
 
     model = AsymmetricCroCo3DStereo.from_pretrained(model_path).to(device)
 
-    scenes = [osp.join(img_base_path, d) for d in os.listdir(img_base_path)]
+    scenes = scan(img_base_path)
+    scenes = sorted(scenes)
     for scene_path in scenes:
         if not osp.isdir(scene_path):
             continue
-        if osp.exists(os.path.join(scene_path, 'colors.npy')):
-            continue
-        print(scene_path)
+
+        views = sorted(get_image_files(scene_path))
+        views = filter_images(img_base_path, views)
+        
+        with open(os.path.join(scene_path, 'meta.pkl'), 'wb') as f:
+            pickle.dumps(views)
+
+        for idx, vs in enumerate(views):
+            if os.path.exists(
+                os.path.join(scene_path, f'{idx}', 'pose.npy')
+            ):
+                continue
+
+            images = load_images(vs)
+            start_time = time.time()
+            pairs = make_pairs(
+                images, scene_graph='swin', prefilter=None, symmetrize=True
+            )
+            output = inference(pairs, model, args.device, batch_size=batch_size)
+            scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
             
-        view_folders = sorted([osp.join(scene_path, d) for d in os.listdir(scene_path) if osp.isdir(osp.join(scene_path, d))])
-        views = sorted([osp.join(d, 'gt_enhanced.png') for d in view_folders])
-        images = load_images(views)
-        print(f"{scene_path}")
+            try:
+                loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
+                
+                # outfile = get_3D_model_from_scene(
+                #     outdir='output', silent=False, as_pointcloud=False, scene=scene, clean_depth=True)
+                
+                scene = scene.clean_pointcloud()
+                imgs = np.array(scene.imgs)
+                focals = scene.get_focals()
+                poses = to_numpy(scene.get_im_poses())
+                pts3d = to_numpy(scene.get_pts3d())
+                scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
+                confidence_masks = to_numpy(scene.get_masks())
+                intrinsics = to_numpy(scene.get_intrinsics())
+                depths = [
+                    d.squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
+                depths = np.array(depths)
+                
+                ##########################################################################################################################################################################################
+                end_time = time.time()
+                print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
 
-        start_time = time.time()
-        pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
-        output = inference(pairs, model, args.device, batch_size=batch_size)
-        scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
-        loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
-        scene = scene.clean_pointcloud()
-        imgs = np.array(scene.imgs)
-        focals = scene.get_focals()
-        poses = to_numpy(scene.get_im_poses())
-        pts3d = to_numpy(scene.get_pts3d())
-        scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
-        confidence_masks = to_numpy(scene.get_masks())
-        intrinsics = to_numpy(scene.get_intrinsics())
-        depths = [
-            d.squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
-        depths = np.array(depths)
-        ##########################################################################################################################################################################################
-        end_time = time.time()
-        print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
+                new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
+                new_intrinsics[:, :3, :3] = intrinsics
 
-        new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
-        new_intrinsics[:, :3, :3] = intrinsics
-
-        # save
-        np.save(os.path.join(scene_path, 'pose.npy'), poses)
-        np.save(os.path.join(scene_path, 'intrinsic.npy'), new_intrinsics)
-        np.save(os.path.join(scene_path, 'depths.npy'), depths)
-        np.save(os.path.join(scene_path, 'colors.npy'), imgs)
+                # save
+                os.makedirs(os.path.join(scene_path, f'{idx}'), exist_ok=True)
+                np.save(os.path.join(scene_path, f'{idx}', 'pose.npy'), poses)
+                np.save(os.path.join(scene_path, f'{idx}', 'intrinsic.npy'), new_intrinsics)
+                np.save(os.path.join(scene_path, f'{idx}', 'depths.npy'), depths)
+            except:
+                pass

@@ -26,16 +26,11 @@ class Decoder(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.out = nn.Conv2d(64, 3, 3, 1, 1)
-        self.up = nn.Sequential(
-            nn.Conv2d(64, 64 * 4, 3, 1, 1, bias=False),
-            nn.PixelShuffle(2),
-            nn.GELU(),
-        )
 
         self.apply(self._init_weights)
 
     def forward(self, x):
-        return self.out(self.up(x))
+        return self.out(x)
 
 
 class LightFormer(BaseModule):

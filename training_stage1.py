@@ -17,8 +17,8 @@ from accelerate.utils import set_seed
 from tqdm import tqdm
 import lpips
 
-from models.losses.synthesis import PerceptualLoss
-from models.losses.cobi import ContextualBilateralLoss
+from models.losses.synthesis import *
+from models.losses.cobi import ContextualBilateralLoss, ContextualLoss
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
@@ -93,13 +93,10 @@ def main(args) -> None:
     if accelerator.is_local_main_process:
         writer = SummaryWriter(exp_dir)
         print(f"Training for {max_steps} steps...")
-    
-    l1 = nn.L1Loss()
+
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts in loader:
-            dataset.n_samples = np.random.choice([3, 4, 5])
-            
             dst_ds = dst_ds.float().to(device)
             dst_cs = dst_cs.float().to(device)
             src_cs = src_cs.float().to(device)
@@ -121,21 +118,29 @@ def main(args) -> None:
             # with torch.no_grad():
             #     dst_cs = dst_cs * mask
 
-            if global_step % 500 == 0:
+            if global_step % 400 == 0:
                 x = dst_cs[0].permute(1, 2, 0) * 255
                 x = x.detach().cpu().numpy().astype(np.uint8)
-                cv2.imwrite('c_tgt.png', x)
+                cv2.imwrite('output/c_tgt.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
                 
                 x = pred[0].permute(1, 2, 0) * 255
                 x = x.detach().cpu().numpy().astype(np.uint8)
-                cv2.imwrite('c_prd.png', x)
-                # for i in range(warp.shape[1]):
-                #     x = warp[0][i].permute(1, 2, 0) * 255
-                #     x = x.detach().cpu().numpy().astype(np.uint8)
-                #     cv2.imwrite(f'xs_{i}.png', x)
+                cv2.imwrite('output/c_prd.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
 
-            loss_l1 = l1(pred, dst_cs)
-            loss_p = ploss(pred, dst_cs)
+                lw = (warp * 255.0).clamp(0, 255.0)
+                for k in range(lw.shape[1]):
+                    out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+                    cv2.imwrite(f'output/c_prj{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+
+                # x = warp[0][i].permute(1, 2, 0) * 255
+                # x = x.detach().cpu().numpy().astype(np.uint8)
+                # cv2.imwrite(f'xs_{i}.png', x)
+
+            with torch.no_grad():
+                mask = dilate_mask(mask.detach())
+
+            loss_l1 = masked_l1_loss(pred, dst_cs, mask)
+            loss_p = 0.05 * ploss(pred, dst_cs, mask)
             loss = loss_l1 + loss_p
 
             opt.zero_grad()

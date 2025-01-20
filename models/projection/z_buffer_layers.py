@@ -95,8 +95,8 @@ class RasterizePointsXYsBlending(nn.Module):
         )
         z_buf = z_buf.permute(0, 3, 1, 2)
         alphas = alphas * (z_buf >= 0)
-        if max_alpha:
-            alphas = (alphas == torch.max(alphas, dim=1)[0].unsqueeze(1)).float()
+        # if max_alpha:
+        #     alphas = (alphas == torch.max(alphas, dim=1)[0].unsqueeze(1)).float()
         if self.opts.model.accumulation == 'alphacomposite':
             transformed_src_alphas = compositing.alpha_composite(
                 points_idx.permute(0, 3, 1, 2).long(),

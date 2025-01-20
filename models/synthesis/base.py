@@ -14,7 +14,7 @@ from models.losses.multi_view import *
 
 from models.projection.z_buffer_manipulator import Screen_PtsManipulator
 
-from models.synthesis.encoder import ColorFeats
+from models.synthesis.encoder import ColorFeats, WideResNetMultiScale
 
 # import kornia as K
 
@@ -191,7 +191,7 @@ class BaseModule(nn.Module):
             feats = self.encoder(colors)
             prj_feats = []
             prj_depths = []
-            for i, fs in enumerate([colors, *feats]):
+            for i, fs in enumerate([colors, feats]):
                 prj_fs, prj_pts = self.warp_all_views(
                     fs, depths, ori_shape,
                     self.compute_K(K, ori_shape, fs.shape[-2:]),
@@ -199,7 +199,6 @@ class BaseModule(nn.Module):
                     radius=self.opt.model.radius if i == 0 else self.opt.model.fradius,
                     max_alpha=False if i == 0 else self.opt.model.fradius # False if i == 0 else self.opt.model.fradius
                 )
-
                 prj_feats.append(prj_fs)     # N, V, C, H, W
                 prj_depths.append(prj_pts)   # N, V, C, H, W
 
@@ -207,19 +206,19 @@ class BaseModule(nn.Module):
         
     def extract_prj_feats(self, prj_colors):
         with torch.no_grad():
-            return self.encoder(prj_colors)
+            vfs = self.encoder(prj_colors)
+        return vfs
 
     def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
-        prj_src_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
-        prj_feats = self.extract_prj_feats(prj_src_feats[0])
+        prj_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
 
-        merged_fs = self.merge_net(prj_feats, prj_src_feats[1:], prj_depths[1:])
+        merged_fs = self.merge_net(prj_feats[1], prj_depths[1])
 
         mask = (torch.sum(prj_depths[0], dim=1) > 0).float()
 
         final = self.out(merged_fs)
 
-        return final, mask, prj_src_feats[0]  # self.out(merged_fs), warped
+        return final, mask, prj_feats[0]  # self.out(merged_fs), warped
 
     def rendering_all_views(
             self, src_feats, src_pts,

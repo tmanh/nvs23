@@ -373,9 +373,6 @@ class BlockCAT(nn.Module):     # NOTE: Spatial attention (Conv2D style)
         self.k = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
         self.v = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
 
-        self.qm = nn.Conv2d(1, dim, kernel_size=7, bias=bias, padding=3)
-        self.km = nn.Conv2d(1, dim, kernel_size=7, bias=bias, padding=3)
-
         self.attend = nn.Sequential(
             nn.Softmax(dim = -1),
             nn.Dropout(dropout)
@@ -383,7 +380,7 @@ class BlockCAT(nn.Module):     # NOTE: Spatial attention (Conv2D style)
 
         self.to_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
 
-    def forward(self, x, y, m=None):
+    def forward(self, x, y):
         # project for queries, keys, values
         b, c, h, w = x.shape
 
@@ -391,34 +388,22 @@ class BlockCAT(nn.Module):     # NOTE: Spatial attention (Conv2D style)
         k = self.k(y)
         v = self.v(y)
 
-        if m is not None:
-            qm = self.qm(m)
-            km = self.km(m)
-
         pad_r = (self.ps - w % self.ps) % self.ps
         pad_b = (self.ps - h % self.ps) % self.ps
 
         q = F.pad(q, (0, pad_r, 0, pad_b))
         k = F.pad(k, (0, pad_r, 0, pad_b))
         v = F.pad(v, (0, pad_r, 0, pad_b))
-        if m is not None:
-            qm = F.pad(qm, (0, pad_r, 0, pad_b))
-            km = F.pad(km, (0, pad_r, 0, pad_b))
         h_pad, w_pad = q.shape[-2], q.shape[-1]
 
         # split heads
         q, k, v = map(lambda t: rearrange(t, 'b (h d) (x w1) (y w2) -> (b x y) h (w1 w2) d', h = self.heads, w1=self.ps, w2=self.ps), (q, k, v))
-        if m is not None:
-            qm, km = map(lambda t: rearrange(t, 'b (h d) (x w1) (y w2) -> (b x y) h (w1 w2) d', h = self.heads, w1=self.ps, w2=self.ps), (qm, km))
 
         # scale
         q = q * self.scale
 
         # sim
         sim = einsum('b h i d, b h j d -> b h i j', q, k)
-        if m is not None:
-            sim_m = einsum('b h i d, b h j d -> b h i j', qm, km)
-            sim = sim * sim_m
 
         # attention
         attn = self.attend(sim)

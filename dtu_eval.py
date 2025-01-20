@@ -71,24 +71,18 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
-    cfg = OmegaConf.load('configs/train.yaml')
-    model = LightFormer(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0025000.pt', weights_only=False)
-    model.load_state_dict(sd)
-
     H, W = 512, 384
 
-    adepths = torch.tensor(np.load('wildrgb/cake_029/depths.npy'))
+    adepths = torch.tensor(np.load('wildrgb/apple_029/depths.npy'))
     adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
 
-    acolors = torch.tensor(np.load('wildrgb/cake_029/colors.npy'))
+    acolors = torch.tensor(np.load('wildrgb/apple_029/colors.npy'))
     acolors = acolors.permute(0, 3, 1, 2).unsqueeze(0).float().cuda()
 
-    aK = torch.tensor(np.load('wildrgb/cake_029/intrinsic.npy'))
+    aK = torch.tensor(np.load('wildrgb/apple_029/intrinsic.npy'))
     aK = aK.unsqueeze(0).float().cuda()
 
-    aRTs = torch.tensor(np.load('wildrgb/cake_029/pose.npy'))
+    aRTs = torch.tensor(np.load('wildrgb/apple_029/pose.npy'))
     aRTs = aRTs.unsqueeze(0).float().cuda()
 
     dst_RTs = aRTs[:, 0, :, :]
@@ -98,10 +92,12 @@ def main(args):
     dst_RTinvs = torch.inverse(dst_RTs)
 
     K = aK[:, 0]
-    depths = adepths[:, 1:]
-    colors = acolors[:, 1:]
-    src_RTs = aRTs[:, 1:]
-    src_RTinvs = aRTs_inv[:, 1:]
+    depths = adepths[:, 1:8:6]
+    colors = acolors[:, 1:8:6]
+    src_RTs = aRTs[:, 1:8:6]
+    src_RTinvs = aRTs_inv[:, 1:8:6]
+    # print(src_RTs.shape, aRTs.shape)
+    # exit()
 
     N, V, _, oH, oW = colors.shape
     colors = F.interpolate(
@@ -120,6 +116,11 @@ def main(args):
     K[:, 0] = W / oW * K[:, 0]
     K[:, 1] = H / oH * K[:, 1]
     
+    ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
+    cfg = OmegaConf.load('configs/train.yaml')
+    model = LightFormer(cfg).to(device)
+    sd = torch.load('exp/checkpoints/0040000.pt', weights_only=False)
+    model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():
         out, mask, warped = model(
