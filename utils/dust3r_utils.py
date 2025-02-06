@@ -8,7 +8,7 @@ from plyfile import PlyData, PlyElement
 import torchvision.transforms as tvf
 import roma
 import dust3r.cloud_opt.init_im_poses as init_fun
-from dust3r.cloud_opt.base_opt import global_alignment_loop
+from dust3r.cloud_opt.base_opt import global_alignment_loop, lora3d_global_alignment_loop
 from dust3r.utils.geometry import geotrf, inv
 from dust3r.cloud_opt.commons import edge_str
 from dust3r.utils.image import _resize_pil_image
@@ -103,6 +103,20 @@ def compute_global_alignment(scene, init=None, niter_PnP=10, focal_avg=False, kn
 
     return global_alignment_loop(scene, **kw)
 
+
+@torch.cuda.amp.autocast(enabled=False)
+def lora3d_compute_global_alignment(scene, init=None, niter_PnP=10, focal_avg=False, known_focal=None, **kw):
+    if init is None:
+        pass
+    elif init == 'msp' or init == 'mst':
+        init_minimum_spanning_tree(scene, niter_PnP=niter_PnP, focal_avg=focal_avg, known_focal=known_focal)
+    elif init == 'known_poses':
+        init_fun.init_from_known_poses(scene, min_conf_thr=scene.min_conf_thr,
+                                        niter_PnP=niter_PnP)
+    else:
+        raise ValueError(f'bad value for {init=}')
+
+    return lora3d_global_alignment_loop(scene, **kw)
 
 
 def load_images(folder_or_list, size, square_ok=False):

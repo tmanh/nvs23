@@ -59,12 +59,16 @@ def get_conf_trf(mode):
     return conf_trf
 
 
-def l2_dist(a, b, weight):
+def l2_dist(a, b, weight=None):
+    if weight is None:
+        return (a - b).square().sum(dim=-1)
     return ((a - b).square().sum(dim=-1) * weight)
 
 
-def l1_dist(a, b, weight):
-    return ((a - b).norm(dim=-1) * weight)
+def l1_dist(a, b, weight=None):
+    if weight is None:
+        return (a - b).abs().norm(dim=-1)
+    return ((a - b).abs().norm(dim=-1) * weight)
 
 
 ALL_DISTS = dict(l1=l1_dist, l2=l2_dist)

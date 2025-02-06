@@ -19,7 +19,7 @@ from dust3r.utils.image import rgb
 from dust3r.viz import SceneViz, segment_sky, auto_cam_size
 from dust3r.optim_factory import adjust_learning_rate_by_lr
 
-from dust3r.cloud_opt.commons import (edge_str, ALL_DISTS, NoGradParamDict, get_imshapes, signed_expm1, signed_log1p,
+from dust3r.cloud_opt.commons import (edge_str, l1_dist, ALL_DISTS, NoGradParamDict, get_imshapes, signed_expm1, signed_log1p,
                                       cosine_schedule, linear_schedule, get_conf_trf)
 import dust3r.cloud_opt.init_im_poses as init_fun
 
@@ -50,8 +50,10 @@ class BasePCOptimizer (nn.Module):
                          pw_break=20,
                          rand_pose=torch.randn,
                          iterationsCount=None,
-                         verbose=True):
+                         verbose=True, mu=10):
         super().__init__()
+        self.mu = mu
+
         if not isinstance(view1['idx'], list):
             view1['idx'] = view1['idx'].tolist()
         if not isinstance(view2['idx'], list):
@@ -271,6 +273,7 @@ class BasePCOptimizer (nn.Module):
         pw_poses = self.get_pw_poses()  # cam-to-world
         pw_adapt = self.get_adaptors()
         proj_pts3d = self.get_pts3d()
+        
         # pre-compute pixel weights
         weight_i = {i_j: self.conf_trf(c) for i_j, c in self.conf_i.items()}
         weight_j = {i_j: self.conf_trf(c) for i_j, c in self.conf_j.items()}
@@ -290,6 +293,60 @@ class BasePCOptimizer (nn.Module):
 
             if ret_details:
                 details[i, j] = li + lj
+        
+        loss /= self.n_edges  # average over all pairs
+
+        if ret_details:
+            return loss, details
+        return loss
+    
+    def forward_lora3d(self, ret_details=False):
+        pw_poses = self.get_pw_poses()  # cam-to-world
+        pw_adapt = self.get_adaptors()
+        proj_pts3d = self.get_pts3d()
+
+        
+        # Pre-compute pixel confidences and initialize weights
+        conf_i = {i_j: self.conf_trf(c) for i_j, c in self.conf_i.items()}
+        conf_j = {i_j: self.conf_trf(c) for i_j, c in self.conf_j.items()}
+        print(conf_i.keys())
+        exit()
+        mu = self.mu  # Hyper-parameter for regularization
+        loss = 0
+        if ret_details:
+            details = -torch.ones((self.n_imgs, self.n_imgs))
+
+        for e, (i, j) in enumerate(self.edges):
+            i_j = edge_str(i, j)
+            
+            # Aligned predictions (transformed)
+            aligned_pred_i = geotrf(pw_poses[e], pw_adapt[e] * self.pred_i[i_j])
+            aligned_pred_j = geotrf(pw_poses[e], pw_adapt[e] * self.pred_j[i_j])
+            
+            # Residual computation
+            residual_i = l1_dist(proj_pts3d[i], aligned_pred_i)
+            residual_j = l1_dist(proj_pts3d[j], aligned_pred_j)
+
+            # Update robust weights
+            weight_i = conf_i[i_j] / (1 + (residual_i / mu)) ** 2
+            weight_j = conf_j[i_j] / (1 + (residual_j / mu)) ** 2
+
+            # Compute loss with robust weights
+            li = self.dist(proj_pts3d[i], aligned_pred_i, weight=weight_i).mean()
+            lj = self.dist(proj_pts3d[j], aligned_pred_j, weight=weight_j).mean()
+            
+            # Add regularization term
+            # reg_i = mu * torch.abs((weight_i - conf_i[i_j])).mean()
+            # reg_j = mu * torch.abs((weight_j - conf_j[i_j])).mean()
+
+            epsilon = 1e-8  # Small value to prevent sqrt of zero or negative
+            reg_i = mu * torch.mean((torch.sqrt(torch.abs(weight_i)+epsilon) - torch.sqrt(torch.abs(conf_i[i_j])+epsilon))**2)
+            reg_j = mu * torch.mean((torch.sqrt(torch.abs(weight_j)+epsilon) - torch.sqrt(torch.abs(conf_j[i_j])+epsilon))**2)
+            loss = loss + li + lj + reg_i + reg_j
+
+            if ret_details:
+                details[i, j] = li + lj+ reg_i + reg_j
+
         loss /= self.n_edges  # average over all pairs
 
         if ret_details:
@@ -309,6 +366,20 @@ class BasePCOptimizer (nn.Module):
             raise ValueError(f'bad value for {init=}')
 
         return global_alignment_loop(self, **kw)
+    
+    @torch.cuda.amp.autocast(enabled=False)
+    def lora3d_compute_global_alignment(self, init=None, niter_PnP=10, **kw):
+        if init is None:
+            pass
+        elif init == 'msp' or init == 'mst':
+            init_fun.init_minimum_spanning_tree(self, niter_PnP=niter_PnP)
+        elif init == 'known_poses':
+            init_fun.init_from_known_poses(self, min_conf_thr=self.min_conf_thr,
+                                           niter_PnP=niter_PnP)
+        else:
+            raise ValueError(f'bad value for {init=}')
+
+        return lora3d_global_alignment_loop(self, **kw)
 
     @torch.no_grad()
     def mask_sky(self):
@@ -373,6 +444,32 @@ def global_alignment_loop(net, lr=0.01, niter=300, schedule='cosine', lr_min=1e-
     return loss
 
 
+def lora3d_global_alignment_loop(net, lr=0.01, niter=300, schedule='cosine', lr_min=1e-6):
+    params = [p for p in net.parameters() if p.requires_grad]
+    if not params:
+        return net
+
+    verbose = net.verbose
+    if verbose:
+        print('Global alignement - optimizing for:')
+        print([name for name, value in net.named_parameters() if value.requires_grad])
+
+    lr_base = lr
+    optimizer = torch.optim.Adam(params, lr=lr, betas=(0.9, 0.9))
+
+    loss = float('inf')
+    if verbose:
+        with tqdm.tqdm(total=niter) as bar:
+            while bar.n < bar.total:
+                loss = lora3d_global_alignment_iter(net, bar.n, niter, lr_base, lr_min, optimizer, schedule)
+                bar.set_postfix_str(f'{lr=:g} loss={loss:g}')
+                bar.update()
+    else:
+        for n in range(niter):
+            loss = lora3d_global_alignment_iter(net, n, niter, lr_base, lr_min, optimizer, schedule)
+    return loss
+
+
 def global_alignment_iter(net, cur_iter, niter, lr_base, lr_min, optimizer, schedule):
     t = cur_iter / niter
     if schedule == 'cosine':
@@ -384,6 +481,23 @@ def global_alignment_iter(net, cur_iter, niter, lr_base, lr_min, optimizer, sche
     adjust_learning_rate_by_lr(optimizer, lr)
     optimizer.zero_grad()
     loss = net()
+    loss.backward()
+    optimizer.step()
+
+    return float(loss)
+
+
+def lora3d_global_alignment_iter(net, cur_iter, niter, lr_base, lr_min, optimizer, schedule):
+    t = cur_iter / niter
+    if schedule == 'cosine':
+        lr = cosine_schedule(t, lr_base, lr_min)
+    elif schedule == 'linear':
+        lr = linear_schedule(t, lr_base, lr_min)
+    else:
+        raise ValueError(f'bad lr {schedule=}')
+    adjust_learning_rate_by_lr(optimizer, lr)
+    optimizer.zero_grad()
+    loss = net.forward_lora3d()
     loss.backward()
     optimizer.step()
 

@@ -96,8 +96,6 @@ def main(args):
     colors = acolors[:, 1:8:6]
     src_RTs = aRTs[:, 1:8:6]
     src_RTinvs = aRTs_inv[:, 1:8:6]
-    # print(src_RTs.shape, aRTs.shape)
-    # exit()
 
     N, V, _, oH, oW = colors.shape
     colors = F.interpolate(

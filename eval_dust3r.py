@@ -23,7 +23,7 @@ from dust3r.model import AsymmetricCroCo3DStereo
 from dust3r.utils.device import to_numpy
 from dust3r.image_pairs import make_pairs
 from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
-from utils.dust3r_utils import  compute_global_alignment, storePly, save_colmap_cameras, save_colmap_images
+from utils.dust3r_utils import  compute_global_alignment, lora3d_compute_global_alignment, storePly, save_colmap_cameras, save_colmap_images
 from dust3r.utils.image import _resize_pil_image
 
 import PIL
@@ -56,7 +56,7 @@ def load_images(images, size=512):
             [img.size[::-1]]), idx=len(imgs), instance=str(len(imgs))))
 
     print(f' (Found {len(imgs)} images)')
-    return imgs, (width, height)
+    return imgs
 
 
 def filter_images(path, images):
@@ -150,7 +150,7 @@ if __name__ == '__main__':
     niter = args.niter
     n_views = args.n_views
     # img_base_path = 'datasets/arkitscenes_processed'
-    img_base_path = 'datasets/DTU/Rectified'
+    img_base_path = 'datasets/example3'
 
     model = AsymmetricCroCo3DStereo.from_pretrained(model_path).to(device)
 
@@ -163,8 +163,8 @@ if __name__ == '__main__':
         views = sorted(get_image_files(scene_path))
         views = filter_images(img_base_path, views)
         
-        with open(os.path.join(scene_path, 'meta.pkl'), 'wb') as f:
-            pickle.dumps(views)
+        # with open(os.path.join(scene_path, 'meta.pkl'), 'wb') as f:
+        #     pickle.dumps(views)
 
         for idx, vs in enumerate(views):
             if os.path.exists(
@@ -172,7 +172,7 @@ if __name__ == '__main__':
             ):
                 continue
 
-            images, shape = load_images(vs)
+            images = load_images(vs)
             start_time = time.time()
             pairs = make_pairs(
                 images, scene_graph='swin', prefilter=None, symmetrize=True
@@ -180,39 +180,34 @@ if __name__ == '__main__':
             output = inference(pairs, model, args.device, batch_size=batch_size)
             scene = global_aligner(output, device=args.device, mode=GlobalAlignerMode.PointCloudOptimizer)
             
-            try:
-                loss = compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
+            # compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
+            loss = lora3d_compute_global_alignment(scene=scene, init="mst", niter=niter, schedule=schedule, lr=lr, focal_avg=args.focal_avg)
                 
-                # outfile = get_3D_model_from_scene(
-                #     outdir='output', silent=False, as_pointcloud=False, scene=scene, clean_depth=True)
+            outfile = get_3D_model_from_scene(
+                outdir='output', silent=False, as_pointcloud=True, scene=scene, clean_depth=True)
+            print('here')
+            exit()
+            scene = scene.clean_pointcloud()
+            imgs = np.array(scene.imgs)
+            focals = scene.get_focals()
+            poses = to_numpy(scene.get_im_poses())
+            pts3d = to_numpy(scene.get_pts3d())
+            scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
+            confidence_masks = to_numpy(scene.get_masks())
+            intrinsics = to_numpy(scene.get_intrinsics())
+            depths = [
+                d.squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
+            depths = np.array(depths)
                 
-                scene = scene.clean_pointcloud()
-                imgs = np.array(scene.imgs)
-                focals = scene.get_focals()
-                poses = to_numpy(scene.get_im_poses())
-                pts3d = to_numpy(scene.get_pts3d())
-                scene.min_conf_thr = float(scene.conf_trf(torch.tensor(1.0)))
-                confidence_masks = to_numpy(scene.get_masks())
-                intrinsics = to_numpy(scene.get_intrinsics())
-                depths = [
-                    d.squeeze(0).squeeze(0).detach().cpu().numpy() for d in scene.get_depthmaps()]
-                depths = np.array(depths)
-                
-                ##########################################################################################################################################################################################
-                end_time = time.time()
-                print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
+            ##########################################################################################################################################################################################
+            end_time = time.time()
+            print(f"Time taken for {n_views} views: {end_time-start_time} seconds")
 
-                new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
-                new_intrinsics[:, :3, :3] = intrinsics
-                new_intrinsics[:, 0, :] = (shape[0] / depths.shape[2]) * new_intrinsics[:, 0, :]
-                new_intrinsics[:, 1, :] = (shape[1] / depths.shape[1]) * new_intrinsics[:, 1, :]
+            new_intrinsics = np.eye(4, 4).reshape((1, 4, 4)).repeat(intrinsics.shape[0], 0)
+            new_intrinsics[:, :3, :3] = intrinsics
 
-                depths = cv2.resize(depths, shape, interpolation=cv2.INTER_NEAREST)
-
-                # save
-                os.makedirs(os.path.join(scene_path, f'{idx}'), exist_ok=True)
-                np.save(os.path.join(scene_path, f'{idx}', 'pose.npy'), poses)
-                np.save(os.path.join(scene_path, f'{idx}', 'intrinsic.npy'), new_intrinsics)
-                np.save(os.path.join(scene_path, f'{idx}', 'depths.npy'), depths)
-            except:
-                pass
+            # save
+            os.makedirs(os.path.join(scene_path, f'{idx}'), exist_ok=True)
+            np.save(os.path.join(scene_path, f'{idx}', 'pose.npy'), poses)
+            np.save(os.path.join(scene_path, f'{idx}', 'intrinsic.npy'), new_intrinsics)
+            np.save(os.path.join(scene_path, f'{idx}', 'depths.npy'), depths)

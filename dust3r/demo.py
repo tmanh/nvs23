@@ -70,8 +70,16 @@ def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, 
     if as_pointcloud:
         pts = np.concatenate([p[m] for p, m in zip(pts3d, mask)])
         col = np.concatenate([p[m] for p, m in zip(imgs, mask)])
+
+        valid_mask = ~np.isnan(pts).any(axis=1)
+        pts = pts[valid_mask]
+        col = col[valid_mask]
+
+        if pts.shape[0] == 0 or col.shape[0] == 0:
+            raise ValueError("No points or colors available for point cloud creation.")
+
         pct = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
-        scene.add_geometry(pct)
+        # scene.add_geometry(pct)
     else:
         meshes = []
         for i in range(len(imgs)):
@@ -95,7 +103,10 @@ def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, 
     outfile = os.path.join(outdir, 'scene.ply')
     if not silent:
         print('(exporting 3D scene to', outfile, ')')
-    scene.export(file_obj=outfile)
+    if as_pointcloud:
+        pct.export(file_obj=outfile, file_type='ply', encoding='binary_little_endian')
+    else:
+        scene.export(file_obj=outfile, file_type='ply')
     exit()
     return outfile
 
