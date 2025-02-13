@@ -141,6 +141,12 @@ def main(args) -> None:
 
             opt.zero_grad()
             accelerator.backward(loss)
+
+            for name, param in renderer.named_parameters():
+                if param.grad is None:
+                    print(name)
+            exit()
+
             opt.step()
             accelerator.wait_for_everyone()
 

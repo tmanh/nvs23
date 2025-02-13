@@ -34,9 +34,6 @@ class Decoder(nn.Module):
 
 
 class LightFormer(BaseModule):
-    def freeze(self):
-        self.freeze_shallow_color_encoder()
-
     def init_fusion_module(self):
         self.merge_net = Fusion()
         self.out = Decoder()

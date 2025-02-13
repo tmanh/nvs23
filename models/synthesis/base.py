@@ -187,27 +187,21 @@ class BaseModule(nn.Module):
     def extract_src_feats(self, colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs):
         ori_shape = colors.shape[-2:]
 
-        with torch.no_grad():
-            feats = self.encoder(colors)
-            prj_feats = []
-            prj_depths = []
-            for i, fs in enumerate([colors, feats]):
-                prj_fs, prj_pts = self.warp_all_views(
-                    fs, depths, ori_shape,
-                    self.compute_K(K, ori_shape, fs.shape[-2:]),
-                    src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
-                    radius=self.opt.model.radius if i == 0 else self.opt.model.fradius,
-                    max_alpha=False if i == 0 else self.opt.model.fradius # False if i == 0 else self.opt.model.fradius
-                )
-                prj_feats.append(prj_fs)     # N, V, C, H, W
-                prj_depths.append(prj_pts)   # N, V, C, H, W
+        feats = self.encoder(colors)
+        prj_feats = []
+        prj_depths = []
+        for i, fs in enumerate([colors, feats]):
+            prj_fs, prj_pts = self.warp_all_views(
+                fs, depths, ori_shape,
+                self.compute_K(K, ori_shape, fs.shape[-2:]),
+                src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
+                radius=self.opt.model.radius if i == 0 else self.opt.model.fradius,
+                max_alpha=False if i == 0 else self.opt.model.fradius # False if i == 0 else self.opt.model.fradius
+            )
+            prj_feats.append(prj_fs)     # N, V, C, H, W
+            prj_depths.append(prj_pts)   # N, V, C, H, W
 
-            return prj_feats, prj_depths
-        
-    def extract_prj_feats(self, prj_colors):
-        with torch.no_grad():
-            vfs = self.encoder(prj_colors)
-        return vfs
+        return prj_feats, prj_depths
 
     def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
         prj_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
@@ -288,9 +282,6 @@ class BaseModule(nn.Module):
         return prj_feats, prj_depths
 
     def freeze(self):
-        self.freeze_shallow_color_encoder()
-
-    def freeze_shallow_color_encoder(self):
         self.encoder.freeze()
 
     def scale_intrinsic(self, K, oh, ow, sh, sw):
