@@ -137,7 +137,7 @@ def main(args) -> None:
             loss_l1 = F.l1_loss(pred, dst_cs)
             loss_p = 0.05 * ploss(pred, dst_cs, mask=None)
             loss = loss_l1 + loss_p
-            print(loss.shape)
+            print(loss)
 
             opt.zero_grad()
             accelerator.backward(loss)
