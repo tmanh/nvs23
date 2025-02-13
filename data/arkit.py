@@ -26,71 +26,74 @@ class ArkitDataset(torch.utils.data.Dataset):
         return len(self.all_objs)
 
     def __getitem__(self, index):
-        scan_index = self.all_objs[index]
-        Ks, Rt, pairs, inames = self.read_cam(scan_index)
+        while True:
+            scan_index = self.all_objs[index]
+            Ks, Rt, pairs, inames = self.read_cam(scan_index)
 
-        ## read RGB image
-        rgb_paths, depth_paths = self.get_path_from(scan_index, inames)
+            ## read RGB image
+            rgb_paths, depth_paths = self.get_path_from(scan_index, inames)
 
-        sample_num = self.n_samples
-        tgt_idx = np.random.randint(0, len(rgb_paths))
-        src_idx = random.sample(pairs[tgt_idx], k=sample_num - 1)
-        sel_indices = [tgt_idx, *src_idx]
+            sample_num = self.n_samples
+            tgt_idx = np.random.randint(0, len(rgb_paths))
+            src_idx = random.sample(pairs[tgt_idx], k=sample_num - 1)
+            sel_indices = [tgt_idx, *src_idx]
 
-        rgb_paths = [rgb_paths[i] for i in sel_indices]
-        depth_paths = [depth_paths[i] for i in sel_indices]
+            rgb_paths = [rgb_paths[i] for i in sel_indices]
+            depth_paths = [depth_paths[i] for i in sel_indices]
 
-        all_imgs = []
-        all_poses = []
-        all_raw_depths = []
-        fx, fy, cx, cy = 0.0, 0.0, 0.0, 0.0
-        for idx, (rgb_path, dep_path) in enumerate(zip(rgb_paths, depth_paths)):
-            i = sel_indices[idx]
-            img = cv2.imread(rgb_path)
-            raw_depth = cv2.imread(dep_path, cv2.IMREAD_UNCHANGED) / 1000.0
+            all_imgs = []
+            all_poses = []
+            all_raw_depths = []
+            fx, fy, cx, cy = 0.0, 0.0, 0.0, 0.0
+            for idx, (rgb_path, dep_path) in enumerate(zip(rgb_paths, depth_paths)):
+                i = sel_indices[idx]
+                img = cv2.imread(rgb_path)
+                raw_depth = cv2.imread(dep_path, cv2.IMREAD_UNCHANGED) / 1000.0
 
-            H, W = img.shape[:2]
-            img = cv2.resize(img, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
-            raw_depth = cv2.resize(raw_depth, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
+                H, W = img.shape[:2]
+                if H != 480 or W != 640:
+                    index = np.random.randint(0, len(self))
+                    continue
+                img = cv2.resize(img, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
+                raw_depth = cv2.resize(raw_depth, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
 
-            raw_depth_tensor = torch.tensor(raw_depth)
-            all_raw_depths.append(raw_depth_tensor)
+                raw_depth_tensor = torch.tensor(raw_depth)
+                all_raw_depths.append(raw_depth_tensor)
 
-            pose = Rt[i]
-            pose[:3, 3] = pose[:3, 3]
-            K = Ks[i]
+                pose = Rt[i]
+                pose[:3, 3] = pose[:3, 3]
+                K = Ks[i]
 
-            pose =  torch.tensor(pose, dtype=torch.float32)
+                pose =  torch.tensor(pose, dtype=torch.float32)
 
-            fx += K[0, 0] / 2
-            fy += K[1, 1] / 2
-            cx += K[0, 2] / 2
-            cy += K[1, 2] / 2
-            img_tensor = self.image_to_tensor(img)
-            all_imgs += [img_tensor]
-            all_poses += [pose]
- 
-        fx /= len(rgb_paths)
-        fy /= len(rgb_paths)
-        cx /= len(rgb_paths)
-        cy /= len(rgb_paths)
+                fx += K[0, 0] / 2
+                fy += K[1, 1] / 2
+                cx += K[0, 2] / 2
+                cy += K[1, 2] / 2
+                img_tensor = self.image_to_tensor(img)
+                all_imgs += [img_tensor]
+                all_poses += [pose]
+    
+            fx /= len(rgb_paths)
+            fy /= len(rgb_paths)
+            cx /= len(rgb_paths)
+            cy /= len(rgb_paths)
 
-        all_imgs = torch.stack(all_imgs)
+            all_imgs = torch.stack(all_imgs)
 
-        K = np.zeros((4, 4))
-        K[0, 0] = fx
-        K[1, 1] = fy
-        K[0, 2] = cx
-        K[1, 2] = cy
-        K[2, 2] = 1.0
-        K[3, 3] = 1.0
-        K = torch.tensor(K, dtype=torch.float32)
+            K = np.zeros((4, 4))
+            K[0, 0] = fx
+            K[1, 1] = fy
+            K[0, 2] = cx
+            K[1, 2] = cy
+            K[2, 2] = 1.0
+            K[3, 3] = 1.0
+            K = torch.tensor(K, dtype=torch.float32)
 
-        all_raw_depths = self.stack_depth_tensors(all_imgs, all_raw_depths)
-        all_poses = torch.stack(all_poses, dim=0)
-        # all_poses = torch.inverse(all_poses)
+            all_raw_depths = self.stack_depth_tensors(all_imgs, all_raw_depths)
+            all_poses = torch.stack(all_poses, dim=0)
 
-        return all_imgs[:1], all_imgs[1:], all_raw_depths[:1], all_raw_depths[1:], K, all_poses[:1], all_poses[1:]
+            return all_imgs[:1], all_imgs[1:], all_raw_depths[:1], all_raw_depths[1:], K, all_poses[:1], all_poses[1:]
 
     def stack_depth_tensors(self, all_imgs, all_raw_depths):
         all_raw_depths = torch.stack(all_raw_depths, dim=0)
