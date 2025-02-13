@@ -98,21 +98,19 @@ class DepthConvGRU2d(nn.Module):
             bias=bias,
         )
 
-    def forward(self, x, d, prev_h=None, prev_d_h=None):
+    def forward(self, x, d, prev_h=None):
         combined = torch.cat([x, d], dim=1)
 
         gate = self.d_conv_gate(combined)
         d_hidden = self.d_conv_hidden(d)
-        hidden = self.conv_hidden(x)
+        hidden = self.conv_hidden(x * d_hidden.sigmoid())
 
-        d_hidden = g(d_hidden)
         hidden = g(hidden)
         gate = gate.sigmoid()
-        
-        hidden = torch.lerp(prev_h, hidden, gate) if exists(prev_h) else (hidden * gate)
-        d_hidden = torch.lerp(prev_d_h, d_hidden, gate) if exists(prev_d_h) else (d_hidden * gate)
 
-        return hidden, d_hidden
+        hidden = torch.lerp(prev_h, hidden, gate) if exists(prev_h) else (hidden * gate)
+
+        return hidden
 
 
 class FuseConvGRU2d(nn.Module):
@@ -136,8 +134,8 @@ class FuseConvGRU2d(nn.Module):
             bias=bias
         )
 
-    def forward(self, x, d, h=None, d_h=None):
-        return self.conv_gru(x, d, h, d_h)
+    def forward(self, x, d, h=None):
+        return self.conv_gru(x, d, h)
 
 
 class GRUBlock(nn.Module):
@@ -179,11 +177,11 @@ class FuseGRUBlock(nn.Module):
             )
         self.stride = stride
 
-    def forward(self, x, d, h=None, dh=None):
+    def forward(self, x, d, h=None):
         if self.stride == 2:
             x = self.down(x)
             d = F.interpolate(d, size=x.shape[-2:], mode='nearest')
-        return self.gru(x, d, h, dh)
+        return self.gru(x, d, h)
 
 
 class GRUUNet(nn.Module):
@@ -219,17 +217,14 @@ class GRUUNet(nn.Module):
 
         ve_hs = [None for _ in self.enc_blocks]
         vd_hs = [None for _ in self.enc_blocks]
-        dd_hs = [None for _ in self.enc_blocks]
         
         views = []
         confs = []
         for view in range(V):
             x = xs[:, view]
-            d = ds[:, view]
             for l in range(len(self.enc_blocks)):
-                x, d = self.enc_blocks[l](x, ds[:, view], ve_hs[l], dd_hs[l])
+                x = self.enc_blocks[l](x, ds[:, view], ve_hs[l])
                 ve_hs[l] = x
-                dd_hs[l] = d
 
             # Bottleneck
             x = self.bottleneck(x)
