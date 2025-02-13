@@ -135,7 +135,7 @@ def main(args) -> None:
                 #     cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
             loss_l1 = F.l1_loss(pred, dst_cs)
-            loss_p = 0.05 * ploss(pred, dst_cs, mask=None)
+            loss_p = 0.05 * ploss(pred, dst_cs)
             loss = loss_l1 + loss_p
             print('xxx - ', loss)
 
