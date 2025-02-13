@@ -41,7 +41,7 @@ class ArkitDataset(torch.utils.data.Dataset):
             if len(pairs[tgt_idx]) <= sample_num - 1:
                 index = np.random.randint(0, len(self))
                 flag = True
-                break
+                continue
             src_idx = random.sample(pairs[tgt_idx], k=sample_num - 1)
             sel_indices = [tgt_idx, *src_idx]
 
