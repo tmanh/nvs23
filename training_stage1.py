@@ -112,7 +112,7 @@ def main(args) -> None:
             )
             dst_cs = dst_cs.squeeze(1)
 
-            print(pred.shape)
+            print(pred.shape, dst_cs.shape)
 
             if global_step % 400 == 0:
                 x = dst_cs[0].permute(1, 2, 0) * 255
@@ -135,6 +135,7 @@ def main(args) -> None:
             loss_l1 = F.l1_loss(pred, dst_cs)
             loss_p = 0.05 * ploss(pred, dst_cs, mask=None)
             loss = loss_l1 + loss_p
+            print(loss.shape)
 
             opt.zero_grad()
             accelerator.backward(loss)
