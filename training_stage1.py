@@ -29,7 +29,6 @@ def main(args) -> None:
     # Setup accelerator:
     accelerator = Accelerator(
         split_batches=True,
-        find_unused_parameters=True  # Avoid unnecessary checks)
     )
     set_seed(231)
     device = accelerator.device
