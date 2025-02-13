@@ -134,7 +134,7 @@ class PerceptualLoss(nn.Module):
         self.epsilon = epsilon
         self.h = h
 
-    def forward(self, pred_img, gt_img, mask=None):
+    def forward(self, pred_img, gt_img):
         pred_img = (pred_img - self.mean) / self.std
         gt_img = (gt_img - self.mean) / self.std
 
@@ -146,7 +146,6 @@ class PerceptualLoss(nn.Module):
         loss = sum(
             self.compute_contextual_loss(
                 self.compute_similarity(pred_fs[i], gt_fs[i]),
-                mask 
             ) for i in range(len(gt_fs))
         )
         return loss
