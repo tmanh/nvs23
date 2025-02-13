@@ -38,7 +38,7 @@ class ArkitDataset(torch.utils.data.Dataset):
 
             sample_num = self.n_samples
             tgt_idx = np.random.randint(0, len(rgb_paths))
-            if len(pairs[tgt_idx]) <= sample_num - 1:
+            if tgt_idx not in pairs or len(pairs[tgt_idx]) <= sample_num - 1:
                 index = np.random.randint(0, len(self))
                 flag = True
                 continue
