@@ -112,8 +112,7 @@ def main(args) -> None:
             )
             dst_cs = dst_cs.squeeze(1)
 
-            # with torch.no_grad():
-            #     dst_cs = dst_cs * mask
+            print(pred.shape, )
 
             if global_step % 400 == 0:
                 x = dst_cs[0].permute(1, 2, 0) * 255

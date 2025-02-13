@@ -213,12 +213,12 @@ class BaseModule(nn.Module):
         prj_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
 
         merged_fs = self.merge_net(prj_feats[1], prj_depths[1])
-
-        mask = (torch.sum(prj_depths[0], dim=1) > 0).float()
-
         final = self.out(merged_fs)
 
-        return final, mask, prj_feats[0]  # self.out(merged_fs), warped
+        if visualize:
+            mask = (torch.sum(prj_depths[0], dim=1) > 0).float()
+            return final, mask, prj_feats[0]  # self.out(merged_fs), warped
+        return final
 
     def rendering_all_views(
             self, src_feats, src_pts,
