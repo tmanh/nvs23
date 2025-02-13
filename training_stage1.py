@@ -17,8 +17,10 @@ from accelerate.utils import set_seed
 from tqdm import tqdm
 import lpips
 
+from data.multi import MultiDataset
 from models.losses.synthesis import *
 from models.losses.cobi import ContextualBilateralLoss, ContextualLoss
+from models.synthesis.fwd import FWD
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
@@ -43,7 +45,7 @@ def main(args) -> None:
         print(f"Experiment directory created at {exp_dir}")
 
     # Create model:
-    renderer = LightFormer(cfg)
+    renderer = FWD(cfg)
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
@@ -96,6 +98,9 @@ def main(args) -> None:
     while global_step < max_steps:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts in loader:
+            if isinstance(dataset, MultiDataset):
+                dataset.which_data = np.random.randint(low=0, high=2)
+
             dst_ds = dst_ds.float().to(device)
             dst_cs = dst_cs.float().to(device)
             src_cs = src_cs.float().to(device)
@@ -113,8 +118,6 @@ def main(args) -> None:
                 visualize=False
             )
             dst_cs = dst_cs.squeeze(1)
-
-            print(pred.shape, dst_cs.shape)
 
             if global_step % 400 == 0:
                 x = dst_cs[0].permute(1, 2, 0) * 255

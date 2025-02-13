@@ -10,7 +10,7 @@ from .util import get_image_to_tensor_balanced, load_pfm
 
 
 class DTU_Dataset(torch.utils.data.Dataset):
-    def __init__(self, file_list, val):
+    def __init__(self, file_list, val=None):
         super().__init__()
         path = file_list
         self.file_list = file_list
@@ -61,10 +61,10 @@ class DTU_Dataset(torch.utils.data.Dataset):
 
             pose =  torch.tensor(pose, dtype=torch.float32)
 
-            fx += K[0, 0]
-            fy += K[1, 1]
-            cx += K[0, 2]
-            cy += K[1, 2]
+            fx += K[0, 0] / 2
+            fy += K[1, 1] / 2
+            cx += K[0, 2] / 2
+            cy += K[1, 2] / 2
             img_tensor = self.image_to_tensor(img)
             all_imgs += [img_tensor]
             all_poses += [pose]
@@ -90,6 +90,10 @@ class DTU_Dataset(torch.utils.data.Dataset):
         all_raw_depths = self.stack_depth_tensors(all_imgs, all_raw_depths)
         all_poses = torch.stack(all_poses, dim=0)
         all_poses = torch.inverse(all_poses)
+
+        H, W = all_imgs.shape[-2:]
+        all_imgs = F.interpolate(all_imgs, size=(H // 2, W // 2), align_corners=False, mode='bilinear', antialias=True)
+        all_raw_depths = F.interpolate(all_raw_depths, size=(H // 2, W // 2), mode='nearest')
 
         return all_imgs[:1], all_imgs[1:], all_raw_depths[:1], all_raw_depths[1:], K, all_poses[:1], all_poses[1:]
 

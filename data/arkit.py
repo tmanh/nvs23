@@ -13,7 +13,7 @@ from .util import get_image_to_tensor_balanced, load_pfm
 
 
 class ArkitDataset(torch.utils.data.Dataset):
-    def __init__(self, file_list, val):
+    def __init__(self, file_list, val=None):
         super().__init__()
         self.file_list = file_list
         self.n_samples = 3
@@ -48,7 +48,11 @@ class ArkitDataset(torch.utils.data.Dataset):
             i = sel_indices[idx]
             img = cv2.imread(rgb_path)
             raw_depth = cv2.imread(dep_path, cv2.IMREAD_UNCHANGED) / 1000.0
-            
+
+            H, W = img.shape[:2]
+            img = cv2.resize(img, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
+            raw_depth = cv2.resize(raw_depth, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
+
             raw_depth_tensor = torch.tensor(raw_depth)
             all_raw_depths.append(raw_depth_tensor)
 
@@ -58,10 +62,10 @@ class ArkitDataset(torch.utils.data.Dataset):
 
             pose =  torch.tensor(pose, dtype=torch.float32)
 
-            fx += K[0, 0]
-            fy += K[1, 1]
-            cx += K[0, 2]
-            cy += K[1, 2]
+            fx += K[0, 0] / 2
+            fy += K[1, 1] / 2
+            cx += K[0, 2] / 2
+            cy += K[1, 2] / 2
             img_tensor = self.image_to_tensor(img)
             all_imgs += [img_tensor]
             all_poses += [pose]

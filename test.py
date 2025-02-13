@@ -1,5 +1,11 @@
 import torch
 
+from models.synthesis.fwd import FWD
+
+model = FWD()
+
+exit()
+
 model = torch.hub.load("nx-ai/vision-lstm", "VisionLSTM2")
 
 # load your own model

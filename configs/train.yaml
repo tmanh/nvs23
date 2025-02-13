@@ -9,14 +9,14 @@ model:
 
 dataset:
   train:
-    target: data.arkit.ArkitDataset
+    target: data.multi.MultiDataset
     params:
-      file_list: 'arkitscenes'
+      file_list: '.'
       val: False
   val:
-    target: data.arkit.ArkitDataset
+    target: data.multi.MultiDataset
     params:
-      file_list: 'arkitscenes'
+      file_list: '.'
       val: True
 
 train:
@@ -24,8 +24,8 @@ train:
   exp_dir: 'exp'
   learning_rate: 1e-4
   # total batch size
-  batch_size: 1
-  num_workers: 2
+  batch_size: 16
+  num_workers: 1
   train_steps: 300000
   log_every: 50
   ckpt_every: 5000
