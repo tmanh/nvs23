@@ -38,7 +38,6 @@ class MultiHeadAttention(nn.Module):
         self.fc = nn.Linear(n_head * d_v, d_model, bias=True)
 
         self.attention = ScaledDotProductAttention(temperature=d_k ** 0.5)
-        self.layer_norm = nn.LayerNorm(d_model, eps=1e-6)
 
     def forward(self, q, k, v, mask=None):
         d_k, d_v, n_head = self.d_k, self.d_v, self.n_head
