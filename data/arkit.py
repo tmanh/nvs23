@@ -26,7 +26,10 @@ class ArkitDataset(torch.utils.data.Dataset):
         return len(self.all_objs)
 
     def __getitem__(self, index):
-        while True:
+        flag = True
+        while flag:
+            flag = False
+
             scan_index = self.all_objs[index]
             Ks, Rt, pairs, inames = self.read_cam(scan_index)
 
@@ -53,7 +56,9 @@ class ArkitDataset(torch.utils.data.Dataset):
                 H, W = img.shape[:2]
                 if H != 480 or W != 640:
                     index = np.random.randint(0, len(self))
-                    continue
+                    flag = True
+                    break
+                
                 img = cv2.resize(img, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
                 raw_depth = cv2.resize(raw_depth, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
 
@@ -73,7 +78,10 @@ class ArkitDataset(torch.utils.data.Dataset):
                 img_tensor = self.image_to_tensor(img)
                 all_imgs += [img_tensor]
                 all_poses += [pose]
-    
+
+            if flag:
+                continue
+
             fx /= len(rgb_paths)
             fy /= len(rgb_paths)
             cx /= len(rgb_paths)
