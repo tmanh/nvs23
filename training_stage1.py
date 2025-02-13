@@ -28,7 +28,7 @@ from utils.common import instantiate_from_config
 def main(args) -> None:
     # Setup accelerator:
     accelerator = Accelerator(
-        split_batches=True,ddp_no_static_graph=True,  # Prevents errors in DDP sync
+        split_batches=True,
         find_unused_parameters=True  # Avoid unnecessary checks)
     )
     set_seed(231)
