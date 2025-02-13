@@ -28,12 +28,6 @@ class FWD(BaseModule):
         self.opt = opt
 
         self.encoder = ResNetEncoder(opt, channels_in=3, channels_out=64, downsample=False, norm=opt.norm_G)
-
-        out_dim = 64
-        in_dim = 32 + 64
-        self.vd_1 = nn.Sequential(nn.Linear(4, 16), nn.ReLU(inplace=True), nn.Linear(16, 32))
-        self.vd_2 = nn.Sequential(nn.Linear(in_dim, 64), nn.ReLU(inplace=True), nn.Linear(64, out_dim))
-        
         self.fusion_module = Image_Fusion_Transformer(opt)
         self.decoder = Decoder(opt, norm=opt.decoder_norm)
 
