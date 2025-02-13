@@ -52,7 +52,8 @@ def main(args) -> None:
     
     # Setup optimizer:
     opt = torch.optim.AdamW(
-        renderer.parameters(), lr=cfg.train.learning_rate,
+        [p for p in renderer.parameters() if p.requires_grad],  # Only trainable params
+        lr=cfg.train.learning_rate,
         weight_decay=0
     )
     
@@ -72,7 +73,6 @@ def main(args) -> None:
     if accelerator.is_local_main_process:
         print(f"Dataset contains {len(dataset):,} images from {dataset.file_list}")
 
-    # cobi = ContextualBilateralLoss(device=device)
     ploss = PerceptualLoss().cuda()
 
     # Prepare models for training:
@@ -86,10 +86,7 @@ def main(args) -> None:
     step_loss = []
     epoch = 0
     epoch_loss = []
-    with warnings.catch_warnings():
-        # avoid warnings from lpips internal
-        warnings.simplefilter("ignore")
-        lpips_model = lpips.LPIPS(net="alex", verbose=accelerator.is_local_main_process).eval().to(device)
+
     if accelerator.is_local_main_process:
         writer = SummaryWriter(exp_dir)
         print(f"Training for {max_steps} steps...")
