@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from data.util import load_pfm
 from models.synthesis.lightformer import LightFormer
 
 
@@ -71,19 +72,47 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    H, W = 512, 384
+    path = 'dtu_down_4/DTU/Rectified/scan21/image'
+    dpath = 'dtu_down_4/Depths_2/scan21'
+    im_names = ['000029.png', '000022.png', '000025.png', '000028.png']
+    indices = [29, 22, 25, 28]
 
-    adepths = torch.tensor(np.load('wildrgb/apple_029/depths.npy'))
-    adepths = adepths.unsqueeze(1).unsqueeze(0).float().cuda()
+    camera = np.load('dtu_down_4/camera.npy', allow_pickle=True)
 
-    acolors = torch.tensor(np.load('wildrgb/apple_029/colors.npy'))
-    acolors = acolors.permute(0, 3, 1, 2).unsqueeze(0).float().cuda()
+    acolors = []
+    adepths = []
+    aK = []
+    aRTs = []
+    scale = 1000
+    for i, idx in zip(im_names, indices):
+        img = cv2.imread(os.path.join(path, i))
+        img = torch.tensor(img) / 255.0# * 2 - 1
+        img = img.permute(2, 0, 1).unsqueeze(0)
 
-    aK = torch.tensor(np.load('wildrgb/apple_029/intrinsic.npy'))
-    aK = aK.unsqueeze(0).float().cuda()
+        dep, _ = load_pfm(os.path.join(dpath, i.replace('0000', '000000').replace('png', 'pfm')))
+        dep = torch.tensor(dep.copy()) / scale
+        dep = dep.unsqueeze(0).unsqueeze(0)
+        dep = F.interpolate(dep, size=(300, 400), mode='nearest')
 
-    aRTs = torch.tensor(np.load('wildrgb/apple_029/pose.npy'))
-    aRTs = aRTs.unsqueeze(0).float().cuda()
+        Rt, k = camera[idx]
+        Rt[:3, 3] = Rt[:3, 3] / scale
+        K = np.eye(4, 4)
+        K[:3, :3] = k
+        aK.append(
+            torch.tensor(K).unsqueeze(0)
+        )
+        aRTs.append(
+            torch.inverse(torch.tensor(Rt).unsqueeze(0))
+        )
+        acolors.append(img)
+        adepths.append(dep)
+
+    acolors = torch.stack(acolors, dim=1).float().cuda()
+    adepths = torch.stack(adepths, dim=1).float().cuda()
+    aK = torch.stack(aK, dim=1).float().cuda()
+    aRTs = torch.stack(aRTs, dim=1).float().cuda()
+
+    H, W = 300, 400
 
     dst_RTs = aRTs[:, 0, :, :]
     dst_RTs = dst_RTs.view(1, 1, 4, 4)
@@ -92,10 +121,10 @@ def main(args):
     dst_RTinvs = torch.inverse(dst_RTs)
 
     K = aK[:, 0]
-    depths = adepths[:, 1:8:6]
-    colors = acolors[:, 1:8:6]
-    src_RTs = aRTs[:, 1:8:6]
-    src_RTinvs = aRTs_inv[:, 1:8:6]
+    depths = adepths[:, 1:]
+    colors = acolors[:, 1:]
+    src_RTs = aRTs[:, 1:]
+    src_RTinvs = aRTs_inv[:, 1:]
 
     N, V, _, oH, oW = colors.shape
     colors = F.interpolate(
@@ -117,8 +146,8 @@ def main(args):
     ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
     cfg = OmegaConf.load('configs/train.yaml')
     model = LightFormer(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0040000.pt', weights_only=False)
-    model.load_state_dict(sd)
+    # sd = torch.load('exp/checkpoints/0040000.pt', weights_only=False)
+    # model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():
         out, mask, warped = model(
@@ -145,17 +174,17 @@ def main(args):
     os.makedirs('output', exist_ok=True)
     out = (out * 255.0).clamp(0, 255.0)
     out = out[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    cv2.imwrite('output/out.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+    cv2.imwrite('output/out.png', out)
 
     gt = (gt * 255.0).clamp(0, 255.0)
     gt = gt[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    cv2.imwrite('output/gt.png', cv2.cvtColor(gt, cv2.COLOR_RGB2BGR))
+    cv2.imwrite('output/gt.png', gt)
     
     # warped, merged = warped
     lw = (warped * 255.0).clamp(0, 255.0)
     for k in range(lw.shape[1]):
         out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        cv2.imwrite(f'output/out_{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(f'output/out_{k}.png', out)
     
 
 if __name__ == "__main__":

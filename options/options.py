@@ -13,7 +13,7 @@ def get_dataset(opt):
         opt.z_near = 0.1
         opt.z_far = 20.0
         opt.skip_step = None
-        from data.dtu_dataset import DTU_Dataset
+        from data.dtu import DTU_Dataset
         return DTU_Dataset
     elif opt.dataset == 'shapenet':
         opt.path = os.path.join(opt.dataset_path, "NMR_Dataset")

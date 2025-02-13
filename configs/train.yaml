@@ -9,14 +9,14 @@ model:
 
 dataset:
   train:
-    target: data.gs.DiffData3
+    target: data.arkit.ArkitDataset
     params:
-      file_list: 'wildrgb'
+      file_list: 'arkitscenes'
       val: False
   val:
-    target: data.gs.DiffData3
+    target: data.arkit.ArkitDataset
     params:
-      file_list: 'wildrgb'
+      file_list: 'arkitscenes'
       val: True
 
 train:
@@ -24,7 +24,7 @@ train:
   exp_dir: 'exp'
   learning_rate: 1e-4
   # total batch size
-  batch_size: 2
+  batch_size: 1
   num_workers: 2
   train_steps: 300000
   log_every: 50

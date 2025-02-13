@@ -85,7 +85,7 @@ def get_image_to_tensor_balanced(image_size=0):
     if image_size > 0:
         ops.append(transforms.Resize(image_size))
     ops.extend(
-        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),]
+        [transforms.ToTensor(), transforms.Normalize((0, 0, 0), (1, 1, 1)),]
     )
     return transforms.Compose(ops)
 

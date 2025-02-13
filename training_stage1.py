@@ -128,19 +128,23 @@ def main(args) -> None:
                 cv2.imwrite('output/c_prd.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
 
                 lw = (warp * 255.0).clamp(0, 255.0)
+                src_cs = (src_cs * 255.0).clamp(0, 255.0)
                 for k in range(lw.shape[1]):
                     out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
                     cv2.imwrite(f'output/c_prj{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+
+                    out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+                    cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
                 # x = warp[0][i].permute(1, 2, 0) * 255
                 # x = x.detach().cpu().numpy().astype(np.uint8)
                 # cv2.imwrite(f'xs_{i}.png', x)
 
-            with torch.no_grad():
-                mask = dilate_mask(mask.detach())
+            # with torch.no_grad():
+            #     mask = dilate_mask(mask.detach())
 
-            loss_l1 = masked_l1_loss(pred, dst_cs, mask)
-            loss_p = 0.05 * ploss(pred, dst_cs, mask)
+            loss_l1 = masked_l1_loss(pred, dst_cs, mask=None)
+            loss_p = 0.05 * ploss(pred, dst_cs, mask=None)
             loss = loss_l1 + loss_p
 
             opt.zero_grad()

@@ -164,6 +164,8 @@ cython_debug/
 *.pt
 *.JPG
 
+dtu_down_4
+
 weights
 dataset
 checkpoint

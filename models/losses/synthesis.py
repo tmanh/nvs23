@@ -28,7 +28,7 @@ def dilate_mask(mask, kernel_size=3):
     return dilated_mask.float()
 
 
-def masked_l1_loss(pred, target, mask):
+def masked_l1_loss(pred, target, mask=None):
     """
     Compute L1 loss with a mask.
 
@@ -41,8 +41,8 @@ def masked_l1_loss(pred, target, mask):
         torch.Tensor: Masked L1 loss.
     """
     loss = torch.abs(pred - target)
-    masked_loss = (loss * mask).sum() / mask.sum()
-    return masked_loss
+    loss = (loss * mask).sum() / (mask.sum() + 1e-7) if mask is not None else loss.mean()
+    return loss
 
 
 class SynthesisLoss(nn.Module):
@@ -134,7 +134,7 @@ class PerceptualLoss(nn.Module):
         self.epsilon = epsilon
         self.h = h
 
-    def forward(self, pred_img, gt_img, mask):
+    def forward(self, pred_img, gt_img, mask=None):
         pred_img = (pred_img - self.mean) / self.std
         gt_img = (gt_img - self.mean) / self.std
 
