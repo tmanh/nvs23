@@ -77,7 +77,7 @@ def main(args) -> None:
 
     # Prepare models for training:
     renderer.to_train().to(device)
-    renderer, opt, loader, val_loader = accelerator.prepare(renderer, opt, loader, val_loader)
+    renderer, opt, loader, val_loader = accelerator.prepare(renderer, opt, loader, val_loader, find_unused_parameters=True)
     pure_renderer = accelerator.unwrap_model(renderer)
 
     # Variables for monitoring/logging purposes:
