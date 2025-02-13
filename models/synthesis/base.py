@@ -215,8 +215,10 @@ class BaseModule(nn.Module):
         merged_fs = self.merge_net(prj_feats[1], prj_depths[1])
         final = self.out(merged_fs)
 
+        prj_feats[0] = prj_feats[0].detach()
+
         if visualize:
-            mask = (torch.sum(prj_depths[0], dim=1) > 0).float()
+            mask = (torch.sum(prj_depths[0], dim=1) > 0).float().detach()
             return final, mask, prj_feats[0]  # self.out(merged_fs), warped
         return final
 
