@@ -20,7 +20,7 @@ class ArkitDataset(torch.utils.data.Dataset):
         self.image_to_tensor = get_image_to_tensor_balanced()
 
         self.scale_factor = 100
-        self.all_objs = os.listdir(self.file_list)
+        self.all_objs = [d for d in os.listdir(self.file_list) if os.path.isdir(os.path.join(self.file_list, d))]
         
     def __len__(self):
         return len(self.all_objs)
