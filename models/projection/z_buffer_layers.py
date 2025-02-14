@@ -84,7 +84,7 @@ class RasterizePointsXYsBlending(nn.Module):
         # self._num_points_per_cloud = self._P * torch.ones((self._N,), dtype=torch.int64, device=self.device)
         # Modified this in the pytorch code
         points_idx, z_buf, dist = rasterize_points(
-            pts3D, image_size, radius, self.points_per_pixel,
+            pts3D, image_size, radius, self.points_per_pixel, bin_size=0
         )
 
         dist = dist / pow(radius, self.opts.model.rad_pow)

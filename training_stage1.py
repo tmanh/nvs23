@@ -45,8 +45,8 @@ def main(args) -> None:
         print(f"Experiment directory created at {exp_dir}")
 
     # Create model:
-    renderer = FWD(cfg)
-    # renderer = DeepBlendingPlus(cfg)
+    # renderer = FWD(cfg)
+    renderer = DeepBlendingPlus(cfg)
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
