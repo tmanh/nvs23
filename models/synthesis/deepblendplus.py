@@ -51,6 +51,4 @@ class DeepBlendingPlus(BaseModule):
 
     def init_fusion_module(self):
         self.merge_net = DeepBlending()
-        self.up1 = nn.Conv2d(256, 128, 3, 1, 1)
-        self.up2 = nn.Conv2d(128, 64, 3, 1, 1)
         self.out = nn.Conv2d(64, 3, 3, 1, 1)
