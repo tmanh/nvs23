@@ -46,6 +46,7 @@ def main(args) -> None:
 
     # Create model:
     renderer = FWD(cfg)
+    # renderer = DeepBlendingPlus(cfg)
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
@@ -99,7 +100,7 @@ def main(args) -> None:
         pbar = tqdm(iterable=None, disable=not accelerator.is_local_main_process, unit="batch", total=len(loader))
         for dst_cs, src_cs, dst_ds, src_ds, K, dst_Rts, src_Rts in loader:
             if isinstance(dataset, MultiDataset):
-                dataset.which_data = np.random.randint(low=0, high=2)
+                dataset.which_data = np.random.randint(low=0, high=3)
 
             dst_ds = dst_ds.float().to(device)
             dst_cs = dst_cs.float().to(device)

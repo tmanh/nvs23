@@ -43,7 +43,7 @@ class FWD(BaseModule):
         self.opt.input_view_num = N
 
         fs = self.encoder(colors)
-        fs = torch.cat([fs, colors * 0.5 + 0.5], axis=1)
+        fs = torch.cat([fs, colors], axis=1)
         fs = fs.view(B, N, -1, H, W)
 
         ori_shape = H, W

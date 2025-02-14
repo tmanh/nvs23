@@ -58,11 +58,7 @@ class ArkitDataset(torch.utils.data.Dataset):
                 raw_depth = cv2.imread(dep_path, cv2.IMREAD_UNCHANGED) / 1000.0
 
                 H, W = img.shape[:2]
-                if H != 480 or W != 640:
-                    index = np.random.randint(0, len(self))
-                    flag = True
-                    break
-                
+
                 img = cv2.resize(img, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
                 raw_depth = cv2.resize(raw_depth, dsize=(W // 2, H // 2), interpolation=cv2.INTER_LANCZOS4)
 
@@ -139,12 +135,13 @@ class ArkitDataset(torch.utils.data.Dataset):
         camera_dict = defaultdict(list)
 
         for row in B:
-            cam1, cam2, _ = row  # Extract camera indices (ignore similarity score)
-            cam1, cam2 = int(cam1), int(cam2)  # Convert indices to integers
-            
-            # Add pair to dictionary
-            camera_dict[cam1].append(cam2)
-            camera_dict[cam2].append(cam1)  # Ensure bidirectional linking
+            cam1, cam2, overlap = row  # Extract camera indices (ignore similarity score)
+            if overlap > 0.4:
+                cam1, cam2 = int(cam1), int(cam2)  # Convert indices to integers
+                
+                # Add pair to dictionary
+                camera_dict[cam1].append(cam2)
+                camera_dict[cam2].append(cam1)  # Ensure bidirectional linking
 
         return dict(camera_dict)
 

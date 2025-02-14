@@ -163,7 +163,10 @@ cython_debug/
 *.png
 *.pt
 *.JPG
+*.npy
+*.npz
 
+arkitscenes
 dtu_down_4
 
 weights

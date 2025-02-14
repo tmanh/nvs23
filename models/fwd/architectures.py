@@ -119,7 +119,7 @@ class ResNetDecoder(nn.Module):
         self.norm = nn.Tanh()
 
     def forward(self, x):
-        return self.norm(self.eblocks(x))
+        return self.eblocks(x)
 
 
 #######################################################################################
