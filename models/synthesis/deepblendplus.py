@@ -9,17 +9,17 @@ class DeepBlending(nn.Module):
     def __init__(self, in_dim=64, n_view=2) -> None:
         super().__init__()
 
-        self.conv0   = nn.Conv2d(in_dim + 1, 128, kernel_size=3, stride=2, padding=1)
-        self.conv1   = nn.Conv2d(128 * n_view, 256, kernel_size=3, stride=2, padding=1)
-        self.conv2   = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
-        self.conv3   = nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1)
-        self.conv4   = nn.Conv2d(1024, 2048, kernel_size=3, stride=2, padding=1)
-        self.neck    = nn.Conv2d(2048, 2048, kernel_size=3, stride=1, padding=1)
-        self.uconv1  = nn.Conv2d(2048, 1024, kernel_size=3, stride=1, padding=1)
-        self.uconv2  = nn.Conv2d(1024, 512, kernel_size=3, stride=1, padding=1)
-        self.uconv3  = nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
-        self.uconv4  = nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
-        self.uconv5  = nn.Conv2d(128, n_view, kernel_size=3, stride=1, padding=1)
+        self.conv0   = nn.Conv2d(in_dim + 1, 64, kernel_size=3, stride=2, padding=1)
+        self.conv1   = nn.Conv2d(64 * n_view, 128, kernel_size=3, stride=2, padding=1)
+        self.conv2   = nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1)
+        self.conv3   = nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1)
+        self.conv4   = nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1)
+        self.neck    = nn.Conv2d(1024, 1024, kernel_size=3, stride=1, padding=1)
+        self.uconv1  = nn.Conv2d(1024, 512, kernel_size=3, stride=1, padding=1)
+        self.uconv2  = nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1)
+        self.uconv3  = nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
+        self.uconv4  = nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1)
+        self.uconv5  = nn.Conv2d(64, n_view, kernel_size=3, stride=1, padding=1)
 
     def forward(self, prj_fs, prj_depths):
         fuse = torch.cat([prj_fs, prj_depths], dim=2)
@@ -46,9 +46,34 @@ class DeepBlending(nn.Module):
 
 
 class DeepBlendingPlus(BaseModule):
+    def extract_src_feats(self, colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs):
+        ori_shape = colors.shape[-2:]
+
+        prj_fs, prj_pts = self.warp_all_views(
+            colors, depths, ori_shape,
+            self.compute_K(K, ori_shape, colors.shape[-2:]),
+            src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
+            radius=self.opt.model.radius,
+            max_alpha=False
+        )
+
+        return prj_fs, prj_pts
+
+    def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
+        prj_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
+
+        final = self.merge_net(prj_feats, prj_depths)
+
+        if visualize:
+            mask = (torch.sum(prj_depths, dim=1) > 0).float().detach()
+            return final, mask, prj_feats  # self.out(merged_fs), warped
+        return final
+
     def freeze(self):
-        self.encoder.freeze()
+        pass
 
     def init_fusion_module(self):
-        self.merge_net = DeepBlending()
-        self.out = nn.Conv2d(64, 3, 3, 1, 1)
+        self.merge_net = DeepBlending(in_dim=3)
+
+    def init_color_encoder(self):
+        pass

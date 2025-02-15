@@ -111,32 +111,40 @@ def main(args) -> None:
             src_Rts = src_Rts.float().to(device)
             
             # depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs
-            pred = renderer(
+            # pred = renderer(
+            #     src_ds, src_cs,
+            #     K,
+            #     src_Rts, torch.inverse(src_Rts), 
+            #     dst_Rts, torch.inverse(dst_Rts),
+            #     visualize=False
+            # )
+            pred, _, warp = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
                 dst_Rts, torch.inverse(dst_Rts),
-                visualize=False
+                visualize=True
             )
             dst_cs = dst_cs.squeeze(1)
 
             if global_step % 400 == 0:
-                x = dst_cs[0].permute(1, 2, 0) * 255
+                x = dst_cs[0].permute(1, 2, 0).clamp(0, 1) * 255
                 x = x.detach().cpu().numpy().astype(np.uint8)
                 cv2.imwrite('output/c_tgt.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
                 
-                x = pred[0].permute(1, 2, 0) * 255
+                x = pred[0].permute(1, 2, 0).clamp(0, 1) * 255
                 x = x.detach().cpu().numpy().astype(np.uint8)
                 cv2.imwrite('output/c_prd.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
 
-                # lw = (warp * 255.0).clamp(0, 255.0)
-                # src_cs = (src_cs * 255.0).clamp(0, 255.0)
-                # for k in range(lw.shape[1]):
-                #     out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-                #     cv2.imwrite(f'output/c_prj{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+                lw = (warp * 255.0).clamp(0, 255.0)
+                src_cs = (src_cs * 255.0).clamp(0, 255.0)
+                for k in range(lw.shape[1]):
+                    out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+                    cv2.imwrite(f'output/c_prj{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
-                #     out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-                #     cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+                    out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+                    cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+                # exit()
 
             loss_l1 = F.l1_loss(pred, dst_cs)
             loss_p = 0.05 * ploss(pred, dst_cs)
