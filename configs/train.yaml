@@ -9,15 +9,31 @@ model:
 
 dataset:
   train:
-    target: data.multi.MultiDataset # data.multi.MultiDataset, data.dtu.DTU_Dataset, data.wildrgb.WildRGBDataset
+    target: data.multi.MultiDataLoader # data.multi.MultiDataset, data.dtu.DTU_Dataset, data.wildrgb.WildRGBDataset
     params:
       file_list: 'datasets' # 'datasets', 'datasets/dtu_down_4', datasets/wildrgb
-      val: False
+      batch_size: 4
+      shuffle: True
+      num_workers: 1
   val:
-    target: data.multi.MultiDataset
+    target: data.multi.MultiDataLoader
     params:
       file_list: 'datasets'
-      val: True
+      batch_size: 4
+      shuffle: False
+      num_workers: 1
+
+# dataset:
+#   train:
+#     target: data.multi.MultiDataLoader # data.multi.MultiDataset, data.dtu.DTU_Dataset, data.wildrgb.WildRGBDataset
+#     params:
+#       file_list: 'datasets' # 'datasets', 'datasets/dtu_down_4', datasets/wildrgb
+#       val: False
+#   val:
+#     target: data.multi.MultiDataLoader
+#     params:
+#       file_list: 'datasets'
+#       val: True
 
 train:
   # experiment directory path
@@ -31,4 +47,4 @@ train:
   ckpt_every: 5000
   image_every: 10000
   val_every: 10000
-  resume: exp/checkpoints/0300000.pt
+  resume: exp/checkpoints/0040000.pt

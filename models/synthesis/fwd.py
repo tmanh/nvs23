@@ -59,4 +59,6 @@ class FWD(BaseModule):
         gen_fs = self.fusion_module(prj_fs.permute(1, 0, 2, 3, 4))
         out = self.decoder(gen_fs)
 
-        return out, None, prj_fs[:, :, -3:]
+        mask = (torch.sum(prj_pts, dim=1) > 0).float()
+
+        return out, mask, prj_fs[:, :, -3:]

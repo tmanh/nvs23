@@ -3,13 +3,10 @@ import torch
 import torch.nn.functional as F
 
 import cv2
-import glob
 import random
-import imageio
 import numpy as np
-from collections import defaultdict
 
-from .util import get_image_to_tensor_balanced, load_pfm
+from .util import get_image_to_tensor_balanced
 
 
 class WildRGBDataset(torch.utils.data.Dataset):
