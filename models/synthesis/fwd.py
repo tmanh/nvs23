@@ -59,4 +59,4 @@ class FWD(BaseModule):
         gen_fs = self.fusion_module(prj_fs.permute(1, 0, 2, 3, 4))
         out = self.decoder(gen_fs)
 
-        return out
+        return out, None, prj_fs[:, :, -3:]

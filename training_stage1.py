@@ -45,8 +45,8 @@ def main(args) -> None:
         print(f"Experiment directory created at {exp_dir}")
 
     # Create model:
-    # renderer = FWD(cfg)
-    renderer = DeepBlendingPlus(cfg)
+    renderer = FWD(cfg)
+    # renderer = DeepBlendingPlus(cfg)
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
@@ -127,7 +127,7 @@ def main(args) -> None:
             )
             dst_cs = dst_cs.squeeze(1)
 
-            if global_step % 400 == 0:
+            if global_step % 250 == 0:
                 x = dst_cs[0].permute(1, 2, 0).clamp(0, 1) * 255
                 x = x.detach().cpu().numpy().astype(np.uint8)
                 cv2.imwrite('output/c_tgt.png', cv2.cvtColor(x, cv2.COLOR_RGB2BGR))
@@ -144,8 +144,8 @@ def main(args) -> None:
 
                     out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
                     cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
-                # exit()
-
+                # input()
+                
             loss_l1 = F.l1_loss(pred, dst_cs)
             loss_p = 0.05 * ploss(pred, dst_cs)
             loss = loss_l1 + loss_p

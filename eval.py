@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from data.util import load_pfm
+from models.synthesis.fwd import FWD
 from models.synthesis.lightformer import LightFormer
 
 
@@ -145,12 +146,12 @@ def main(args):
     
     ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
     cfg = OmegaConf.load('configs/train.yaml')
-    model = LightFormer(cfg).to(device)
-    # sd = torch.load('exp/checkpoints/0040000.pt', weights_only=False)
-    # model.load_state_dict(sd)
+    model = FWD(cfg).to(device)
+    sd = torch.load('exp/checkpoints/0300000.pt', weights_only=False)
+    model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():
-        out, mask, warped = model(
+        out, _, warped = model(
             depths,
             colors,
             K,

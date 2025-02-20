@@ -37,57 +37,48 @@ class DTU_Dataset(torch.utils.data.Dataset):
         sample_num = self.n_samples
         sel_indices = torch.randperm(len(rgb_paths))[:sample_num]
 
-        rgb_paths = [rgb_paths[i] for i in sel_indices]
-
         all_imgs = []
         all_poses = []
         all_raw_depths = []
-        raw_depth_max = 0
         fx, fy, cx, cy = 0.0, 0.0, 0.0, 0.0
 
-        for idx, rgb_path in enumerate(rgb_paths):
-            i = sel_indices[idx]
-            img = imageio.imread(rgb_path)[..., :3]
-            raw_depth, _ = load_pfm(depth_paths[i])
+        for idx in sel_indices:
+            img = imageio.imread(rgb_paths[idx])
+            raw_depth, _ = load_pfm(depth_paths[idx])
             raw_depth_tensor = torch.tensor(raw_depth.copy())
 
-            all_raw_depths.append(raw_depth_tensor)
-            if raw_depth_tensor.max() > raw_depth_max:
-                raw_depth_max = raw_depth_tensor.max()
-
-            pose = self.camera[i][0]
-            pose[:3, 3] = pose[:3, 3] / self.scale_factor
-            K = self.camera[i][1]
-
-            pose =  torch.tensor(pose, dtype=torch.float32)
-
+            pose = np.eye(4, 4)
+            pose[:3, :3] = self.camera[idx][0][:3, :3]
+            pose[:3, 3] = self.camera[idx][0][:3, 3] / self.scale_factor
+            pose = torch.tensor(pose, dtype=torch.float32)
+            
+            K = self.camera[idx][1]
             fx += K[0, 0] / 2
             fy += K[1, 1] / 2
             cx += K[0, 2] / 2
             cy += K[1, 2] / 2
-            img_tensor = self.image_to_tensor(img)
-            all_imgs += [img_tensor]
-            all_poses += [pose]
+            
+            all_imgs.append(self.image_to_tensor(img))
+            all_poses.append(pose)
+            all_raw_depths.append(raw_depth_tensor)
 
         all_raw_depths = [depth / self.scale_factor for depth in all_raw_depths]
         
-        fx /= len(rgb_paths)
-        fy /= len(rgb_paths)
-        cx /= len(rgb_paths)
-        cy /= len(rgb_paths)
+        fx /= len(sel_indices)
+        fy /= len(sel_indices)
+        cx /= len(sel_indices)
+        cy /= len(sel_indices)
 
         all_imgs = torch.stack(all_imgs)
+        all_raw_depths = torch.stack(all_raw_depths, dim=0).unsqueeze(1)
 
-        K = np.zeros((4, 4))
+        K = np.eye(4, 4)
         K[0, 0] = fx
         K[1, 1] = fy
         K[0, 2] = cx
         K[1, 2] = cy
-        K[2, 2] = 1.0
-        K[3, 3] = 1.0
         K = torch.tensor(K, dtype=torch.float32)
 
-        all_raw_depths = self.stack_depth_tensors(all_imgs, all_raw_depths)
         all_poses = torch.stack(all_poses, dim=0)
         all_poses = torch.inverse(all_poses)
 
@@ -96,10 +87,6 @@ class DTU_Dataset(torch.utils.data.Dataset):
         all_raw_depths = F.interpolate(all_raw_depths, size=(H // 2, W // 2), mode='nearest')
 
         return all_imgs[:1], all_imgs[1:], all_raw_depths[:1], all_raw_depths[1:], K, all_poses[:1], all_poses[1:]
-
-    def stack_depth_tensors(self, all_imgs, all_raw_depths):
-        all_raw_depths = torch.stack(all_raw_depths, dim=0)
-        return F.interpolate(all_raw_depths.unsqueeze(0), size=all_imgs.shape[-2:], mode="nearest")[0].unsqueeze(1)
 
     def get_path_from(self, scan_index):
         root_dir = os.path.join(self.base_path, scan_index)

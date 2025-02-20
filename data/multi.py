@@ -8,6 +8,7 @@ import numpy as np
 
 from .arkit import ArkitDataset
 from .dtu import DTU_Dataset
+from .wildrgb import WildRGBDataset
 
 
 class MultiDataset(torch.utils.data.Dataset):
@@ -17,12 +18,14 @@ class MultiDataset(torch.utils.data.Dataset):
         self.dtu = DTU_Dataset(os.path.join(file_list, 'dtu_down_4'))
         self.arkitscenes = ArkitDataset(os.path.join(file_list, 'arkitscenes'))
         self.parkitscenes = ArkitDataset(os.path.join(file_list, 'p_arkitscenes'))
+        self.wildrgb = WildRGBDataset(os.path.join(file_list, 'wildrgb'))
 
     def __len__(self):
         self.len_dtu = len(self.dtu)
         self.len_arkit = len(self.arkitscenes)
         self.len_parkit = len(self.parkitscenes)
-        return self.len_dtu + self.len_arkit + self.len_parkit
+        self.len_wildrgb = len(self.wildrgb)
+        return self.len_dtu + self.len_arkit + self.len_parkit + self.len_wildrgb
 
     def __getitem__(self, index):
         if self.which_data == 0:
@@ -31,5 +34,7 @@ class MultiDataset(torch.utils.data.Dataset):
             data = self.arkitscenes
         elif self.which_data == 2:
             data = self.parkitscenes
+        elif self.which_data == 3:
+            data = self.wildrgb
 
         return data[index % len(data)]

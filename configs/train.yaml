@@ -9,14 +9,14 @@ model:
 
 dataset:
   train:
-    target: data.multi.MultiDataset
+    target: data.multi.MultiDataset # data.multi.MultiDataset, data.dtu.DTU_Dataset, data.wildrgb.WildRGBDataset
     params:
-      file_list: '.'
+      file_list: 'datasets' # 'datasets', 'datasets/dtu_down_4', datasets/wildrgb
       val: False
   val:
     target: data.multi.MultiDataset
     params:
-      file_list: '.'
+      file_list: 'datasets'
       val: True
 
 train:
@@ -31,4 +31,4 @@ train:
   ckpt_every: 5000
   image_every: 10000
   val_every: 10000
-  resume: ~ #exp/checkpoints/0010000.pt
+  resume: exp/checkpoints/0300000.pt
