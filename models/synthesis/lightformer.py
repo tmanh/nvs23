@@ -4,6 +4,7 @@ import torch.nn as nn
 from models.layers.fuse import Fusion
 from models.layers.weight_init import trunc_normal_
 from models.synthesis.base import BaseModule
+from models.synthesis.encoder import RadioEncoder
 
 
 class Decoder(nn.Module):
@@ -34,6 +35,10 @@ class Decoder(nn.Module):
 
 
 class LightFormer(BaseModule):
+    def init_color_encoder(self):
+        self.encoder = RadioEncoder()
+        self.encoder.freeze()
+
     def init_fusion_module(self):
         self.merge_net = Fusion()
         self.out = Decoder()

@@ -192,3 +192,27 @@ class ColorFeats(nn.Module):
         for module in self.backbone.modules():
             if isinstance(module, (nn.BatchNorm2d, nn.LayerNorm)):
                 module.eval()
+
+
+class RadioEncoder(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        model_version="radio_v2.5-l" # for RADIOv2.5-L model (ViT-L/16)
+        model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version, progress=True)
+        model.cuda().eval()
+
+    def forward(self, x):
+        nearest_res = self.model.get_nearest_supported_resolution(*x.shape[-2:])
+        x = F.interpolate(x, nearest_res, mode='bilinear', align_corners=False)
+        with torch.no_grad():
+            _, spatial_features = self.model(x, feature_fmt='NCHW')
+        return spatial_features
+    
+    def freeze(self):
+        self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
+        for module in self.model.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.LayerNorm)):
+                module.eval()

@@ -47,4 +47,4 @@ train:
   ckpt_every: 5000
   image_every: 10000
   val_every: 10000
-  resume: exp/checkpoints/0040000.pt
+  resume: ~ # exp/checkpoints/0040000.pt

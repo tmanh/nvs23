@@ -18,6 +18,7 @@ from tqdm import tqdm
 import kornia
 
 from data.multi import MultiDataset, MultiDataLoader
+from models.layers.fuse import LocalFusion
 from models.losses.GlobalPercLoss import radiov2_5_loss
 from models.losses.synthesis import *
 from models.losses.cobi import ContextualBilateralLoss, ContextualLoss
@@ -25,6 +26,7 @@ from models.synthesis.fwd import FWD
 from models.synthesis.lightformer import LightFormer
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
+from models.synthesis.local_fusion import LocalGRU
 from utils.common import instantiate_from_config
 
 
@@ -46,7 +48,8 @@ def main(args) -> None:
         print(f"Experiment directory created at {exp_dir}")
 
     # Create model:
-    renderer = FWD(cfg)
+    renderer = LocalGRU(cfg)
+    # renderer = FWD(cfg)
     # renderer = DeepBlendingPlus(cfg)
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)

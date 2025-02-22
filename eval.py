@@ -10,6 +10,7 @@ import torch.nn.functional as F
 
 from data.util import load_pfm
 from models.synthesis.fwd import FWD
+from models.synthesis.deepblendplus import DeepBlendingPlus
 from models.synthesis.lightformer import LightFormer
 
 
@@ -73,12 +74,12 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    path = 'dtu_down_4/DTU/Rectified/scan21/image'
-    dpath = 'dtu_down_4/Depths_2/scan21'
-    im_names = ['000029.png', '000022.png', '000025.png', '000028.png']
+    path = 'datasets/dtu_down_4/DTU/Rectified/scan21/image'
+    dpath = 'datasets/dtu_down_4/Depths_2/scan21'
+    im_names = ['000029.png', '000022.png', '000025.png']  # , '000028.png'
     indices = [29, 22, 25, 28]
 
-    camera = np.load('dtu_down_4/camera.npy', allow_pickle=True)
+    camera = np.load('datasets/dtu_down_4/camera.npy', allow_pickle=True)
 
     acolors = []
     adepths = []
@@ -146,8 +147,11 @@ def main(args):
     
     ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
     cfg = OmegaConf.load('configs/train.yaml')
-    model = FWD(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0300000.pt', weights_only=False)
+    # model = FWD(cfg).to(device)
+    # sd = torch.load('weights/fwd.pt', weights_only=False)
+    model = DeepBlendingPlus(cfg).to(device)
+    sd = torch.load('exp/checkpoints/0005000.pt', weights_only=False)
+    # sd = torch.load('weights/deepblend.pt', weights_only=False)
     model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():

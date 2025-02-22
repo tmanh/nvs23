@@ -1,8 +1,14 @@
 import torch
 
 from models.synthesis.fwd import FWD
+from models.layers.upsampler import JBUStack
+from models.layers.fuse import SNetDS2BNBase8
 
-model = FWD()
+
+model = SNetDS2BNBase8().cuda()
+
+x = model(torch.rand(1, 3, 512, 384).cuda())
+print(x.shape)
 
 exit()
 
