@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from data.util import load_pfm
 from models.synthesis.fwd import FWD
 from models.synthesis.deepblendplus import DeepBlendingPlus
-from models.synthesis.lightformer import LightFormer
 from models.synthesis.local_syn import LocalGRU
 from models.synthesis.global_syn import GlobalGRU
 
@@ -191,10 +190,10 @@ def main(args):
     cv2.imwrite('output/gt.png', gt)
     
     # warped, merged = warped
-    lw = (warped * 255.0).clamp(0, 255.0)
-    for k in range(lw.shape[1]):
-        out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-        cv2.imwrite(f'output/out_{k}.png', out)
+    # lw = (warped * 255.0).clamp(0, 255.0)
+    # for k in range(lw.shape[1]):
+    #     out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    #     cv2.imwrite(f'output/out_{k}.png', out)
     
 
 if __name__ == "__main__":
