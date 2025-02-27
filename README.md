@@ -1,5 +1,10 @@
 # Novel View Synthesis
 
+## TOC
+
+- [Dependencies](#dependencies)
+- [Directory](#directory)
+
 ## Getting Started
 
 ### Dependencies
@@ -18,6 +23,7 @@ python setup.py install
 ```
 
 ### Directory
+```
 .
 |____environment.yml                    # To install the dependencies
 |____configs                            # All the config files using to init the dataloader and the model for training process
@@ -39,3 +45,4 @@ python setup.py install
 |____training.sh                        # Start the training here
 |____eval.py                            # Simple testing code, not evaluation yet
 |____training.py                        # All training things happen here
+```
