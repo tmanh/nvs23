@@ -44,6 +44,21 @@ class CrossAttention(nn.Module):
         return x
 
 
+class ViewCrossAttention(nn.Module):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+        super().__init__()
+
+        self.cat = CrossAttention(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            attn_drop=attn_drop,
+            proj_drop=proj_drop,
+        )
+
+        self
+
+
 class ICATBlock(nn.Module):
     """ Implementation of CAT Block.
 

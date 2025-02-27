@@ -1,9 +1,8 @@
 model:
   H: 512  # 512
   W: 384  # 
-  radius: 1.5 # 1.5
-  fradius248: 1
-  fradius16: 0.5
+  radius: 1.5
+  fradius: 1.5
   rad_pow: 2
   pp_pixel: 8
   accumulation: "wsumnorm"

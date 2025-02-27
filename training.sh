@@ -1,0 +1,1 @@
+accelerate launch training.py --config configs/train.yaml

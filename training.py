@@ -23,11 +23,11 @@ from models.losses.GlobalPercLoss import radiov2_5_loss
 from models.losses.synthesis import *
 from models.losses.cobi import ContextualBilateralLoss, ContextualLoss
 from models.synthesis.fwd import FWD
-from models.synthesis.lightformer import LightFormer
+from models.synthesis.global_syn import GlobalGRU
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
-from models.synthesis.local_fusion import LocalGRU
-from utils.common import instantiate_from_config
+from models.synthesis.local_syn import LocalGRU
+from utils.common import instantiate_from_config, get_obj_from_str
 
 
 def main(args) -> None:
@@ -47,10 +47,14 @@ def main(args) -> None:
         os.makedirs(ckpt_dir, exist_ok=True)
         print(f"Experiment directory created at {exp_dir}")
 
+    # TODO: create from the config file instead
     # Create model:
-    renderer = LocalGRU(cfg)
+    # renderer = LocalGRU(cfg)
     # renderer = FWD(cfg)
     # renderer = DeepBlendingPlus(cfg)
+    renderer = GlobalGRU(cfg)
+
+    # Load the checkpoint if needed
     if cfg.train.resume and os.path.exists(cfg.train.resume):
         renderer.load_state_dict(torch.load(cfg.train.resume, map_location="cpu"), strict=True)
         if accelerator.is_local_main_process:
@@ -66,7 +70,7 @@ def main(args) -> None:
         weight_decay=0
     )
     
-    # Setup data:
+    # Setup dataloader:
     if 'MultiDataLoader' in cfg.dataset.train.target:
         loader = instantiate_from_config(cfg.dataset.train)
     else:
@@ -87,6 +91,7 @@ def main(args) -> None:
             shuffle=False, drop_last=False
         )
 
+    # Define loss functions (now using radio backbone as perceptual loss)
     ploss = radiov2_5_loss()
 
     # Prepare models for training:
@@ -127,7 +132,7 @@ def main(args) -> None:
             )
             dst_cs = dst_cs.squeeze(1)
 
-            if global_step % 250 == 0:
+            if global_step % 250 == 0: # Visualize each X steps
                 x = dst_cs[0].permute(1, 2, 0) * 255
                 x = x.clamp(0, 255)
                 x = x.detach().cpu().numpy().astype(np.uint8)
@@ -146,10 +151,13 @@ def main(args) -> None:
                     out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
                     cv2.imwrite(f'output/c_prj{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
+                for k in range(src_cs.shape[1]):
                     out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
                     cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
-                # input()
-                
+
+            # The mask point out invalid pixels
+            # So, we dilated the mask a bit so, the network can learn to
+            # fill in small gaps    
             kernel = torch.ones((5, 5), device=mask.device)
             mask = kornia.morphology.closing(mask, kernel).detach()
 
@@ -159,11 +167,6 @@ def main(args) -> None:
 
             opt.zero_grad()
             accelerator.backward(loss)
-
-            # for name, param in renderer.named_parameters():
-            #     if param.grad is None:
-            #         print(name)
-            # exit()
 
             opt.step()
             accelerator.wait_for_everyone()

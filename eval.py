@@ -12,6 +12,8 @@ from data.util import load_pfm
 from models.synthesis.fwd import FWD
 from models.synthesis.deepblendplus import DeepBlendingPlus
 from models.synthesis.lightformer import LightFormer
+from models.synthesis.local_syn import LocalGRU
+from models.synthesis.global_syn import GlobalGRU
 
 
 def peak_signal_noise_ratio_mask(image_true, image_test, mask, data_range=None):
@@ -76,7 +78,7 @@ def main(args):
 
     path = 'datasets/dtu_down_4/DTU/Rectified/scan21/image'
     dpath = 'datasets/dtu_down_4/Depths_2/scan21'
-    im_names = ['000029.png', '000022.png', '000025.png']  # , '000028.png'
+    im_names = ['000029.png', '000022.png', '000025.png', '000028.png']  # , '000028.png'
     indices = [29, 22, 25, 28]
 
     camera = np.load('datasets/dtu_down_4/camera.npy', allow_pickle=True)
@@ -149,9 +151,12 @@ def main(args):
     cfg = OmegaConf.load('configs/train.yaml')
     # model = FWD(cfg).to(device)
     # sd = torch.load('weights/fwd.pt', weights_only=False)
-    model = DeepBlendingPlus(cfg).to(device)
-    sd = torch.load('exp/checkpoints/0005000.pt', weights_only=False)
+    # model = DeepBlendingPlus(cfg).to(device)
     # sd = torch.load('weights/deepblend.pt', weights_only=False)
+    model = LocalGRU(cfg).to(device)
+    sd = torch.load('weights/local.pt', weights_only=False)
+    # model = GlobalGRU(cfg).to(device)
+    # sd = torch.load('weights/global.pt', weights_only=False)
     model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():

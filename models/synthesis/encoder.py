@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import torchvision.models as models
-from models.layers.swin import SwinTransformerV2
 
+from models.layers.swin import SwinTransformerV2
+from utils.hubconf import radio_model
 
 import torch
 import torchvision.models as models
@@ -89,6 +90,68 @@ class MultiScaleResNet50(nn.Module):
         return features
     
 
+class MultiScaleEfficientNetV2(nn.Module):
+    def __init__(self):
+        super(MultiScaleEfficientNetV2, self).__init__()
+        # Load the pretrained EfficientNetV2_S model
+        effnet = models.efficientnet_v2_s(weights=models.EfficientNet_V2_S_Weights.IMAGENET1K_V1)
+        
+        # EfficientNetV2_S has a features attribute (a Sequential of blocks).
+        # We can split these blocks into stages to extract multi-scale features.
+        # The splits below are one possible grouping. You might need to adjust these based on your needs.
+        self.stage0 = nn.Sequential(effnet.features[0])            # e.g., initial stem block
+        self.stage1 = nn.Sequential(*effnet.features[1:3])           # next 2 blocks
+        self.stage2 = nn.Sequential(*effnet.features[3:5])           # next 2 blocks
+        self.stage3 = nn.Sequential(*effnet.features[5:8])           # next 3 blocks
+        self.stage4 = nn.Sequential(*effnet.features[8:])            # remaining blocks
+
+    def forward(self, x, B, V):
+        features = []
+        
+        # Stage 0: initial stem
+        x0 = self.stage0(x)
+        features.append(x0.view(B, V, *x0.shape[1:]))
+        
+        # Stage 1
+        x1 = self.stage1(x0)
+        features.append(x1.view(B, V, *x1.shape[1:]))
+        
+        # Stage 2
+        x2 = self.stage2(x1)
+        features.append(x2.view(B, V, *x2.shape[1:]))
+        
+        # Stage 3
+        x3 = self.stage3(x2)
+        features.append(x3.view(B, V, *x3.shape[1:]))
+        
+        # Stage 4
+        x4 = self.stage4(x3)
+        features.append(x4.view(B, V, *x4.shape[1:]))
+        
+        return features
+    
+
+class MultiScaleSwin(nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.backbone = SwinTransformerV2(window_size=8)
+        self.backbone.load_pretrained()
+        self.backbone.eval()
+
+    def forward(self, x, B, V):
+        feats = self.backbone(x)
+        return feats
+        
+    def freeze(self):
+        self.backbone.eval()
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+        for module in self.backbone.modules():
+            if isinstance(module, (nn.BatchNorm2d, nn.LayerNorm)):
+                module.eval()
+
+
 class ConvNeXtLargeMultiScale(nn.Module):
     def __init__(self):
         super(ConvNeXtLargeMultiScale, self).__init__()
@@ -118,6 +181,9 @@ class ConvNeXtLargeMultiScale(nn.Module):
         features.append(x.view(B, V, *x.shape[1:]))
 
         return features
+    
+
+
 
 
 class ColorFeats(nn.Module):
@@ -197,16 +263,20 @@ class ColorFeats(nn.Module):
 class RadioEncoder(nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        model_version="radio_v2.5-l" # for RADIOv2.5-L model (ViT-L/16)
-        model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version, progress=True)
-        model.cuda().eval()
+        self.model = radio_model(version='radio_v2.5-l').cuda().eval()
 
     def forward(self, x):
-        nearest_res = self.model.get_nearest_supported_resolution(*x.shape[-2:])
-        x = F.interpolate(x, nearest_res, mode='bilinear', align_corners=False)
         with torch.no_grad():
+            B, V, C, H, W = x.shape
+            x = x.view(B * V, -1, H, W)
+
+            nearest_res = self.model.get_nearest_supported_resolution(*x.shape[-2:])
+            x = F.interpolate(x, nearest_res, mode='bilinear', align_corners=False)
             _, spatial_features = self.model(x, feature_fmt='NCHW')
+            
+            H, W = spatial_features.shape[-2:]
+            spatial_features = spatial_features.view(B, V, -1, H, W)
+            
         return spatial_features
     
     def freeze(self):

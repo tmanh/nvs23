@@ -1,0 +1,143 @@
+.
+|____scripts
+| |____move.py
+| |____eval_dust3r.py
+| |____geometry.py
+| |____extract.py
+|____test.py
+|____environment.yml
+|____configs
+| |____train_wsumnorm.yaml
+| |____local.yaml
+| |____train.yaml
+|____utils
+| |____common.py
+| |____hubconf.py
+| |____dust3r_utils.py
+|____models
+| |____losses
+| | |____GlobalPercLossTeacherStudent.py
+| | |____multi_view.py
+| | |____synthesis.py
+| | |____vgg.py
+| | |____GlobalPercLoss.py
+| | |____ssim.py
+| | |____architectures.py
+| | |____cobi.py
+| | |____functional.py
+| |____projection
+| | |____z_buffer_manipulator.py
+| | |____z_buffer_layers.py
+| |____radio
+| | |____vit_patch_generator.py
+| | |____eradio_model.py
+| | |____cls_token.py
+| | |____adaptor_generic.py
+| | |____vision_transformer_xpos.py
+| | |____common.py
+| | |____vitdet.py
+| | |____extra_models.py
+| | |____input_conditioner.py
+| | |____conv.py
+| | |____open_clip_adaptor.py
+| | |____extra_timm_models.py
+| | |____block.py
+| | |____forward_intermediates.py
+| | |____radio_model.py
+| | |______init__.py
+| | |____enable_spectral_reparam.py
+| | |____adaptor_registry.py
+| | |____feature_normalizer.py
+| | |____hf_model.py
+| | |____adaptor_base.py
+| | |____dinov2_arch.py
+| | |____adaptor_mlp.py
+| | |____enable_cpe_support.py
+| |____synthesis
+| | |____local_syn.py
+| | |____encoder.py
+| | |____global_syn.py
+| | |____lightformer.py
+| | |____fwd.py
+| | |____base.py
+| | |____deepblendplus.py
+| |____layers
+| | |____legacy_fuse.py
+| | |____fuse.py
+| | |____basic.py
+| | |____vlstm.py
+| | |____osag.py
+| | |____minGRU
+| | | |____mingru.py
+| | |____helpers.py
+| | |____swin.py
+| | |____utils.py
+| | |____osa_utils.py
+| | |____layernorm.py
+| | |____upsampler.py
+| | |____vision_lstm
+| | | |______init__.py
+| | | |____vision_lstm2.py
+| | | |____vision_lstm_util.py
+| | | |____dvision_lstm2.py
+| | | |____vision_transformer.py
+| | | |____vision_lstm.py
+| | |____normalization.py
+| | |____drop.py
+| | |____osa.py
+| | |____cat.py
+| | |____gruunet.py
+| | |____adaptive_conv_cuda
+| | | |____dist
+| | | | |____adaptive_conv_cuda-0.0.0-py3.11-linux-x86_64.egg
+| | | |____adaptive_conv.py
+| | | |____adaptive_conv_kernel.cu
+| | | |____build
+| | | | |____lib.linux-x86_64-cpython-311
+| | | | | |____adaptive_conv_cuda_impl.cpython-311-x86_64-linux-gnu.so
+| | | | | |____adaptive_conv_cpp_impl.cpython-311-x86_64-linux-gnu.so
+| | | | |____temp.linux-x86_64-cpython-311
+| | | | | |____adaptive_conv_kernel.o
+| | | | | |____.ninja_deps
+| | | | | |____adaptive_conv.o
+| | | | | |____featup
+| | | | | | |____adaptive_conv_cuda
+| | | | | |____adaptive_conv_cuda.o
+| | | | | |____.ninja_log
+| | | | | |____build.ninja
+| | | | |____bdist.linux-x86_64
+| | | |____adaptive_conv_cuda.egg-info
+| | | | |____SOURCES.txt
+| | | | |____PKG-INFO
+| | | | |____dependency_links.txt
+| | | | |____top_level.txt
+| | | |____adaptive_conv_cuda.cpp
+| | | |____adaptive_conv.cpp
+| | | |____setup.py
+| | |____weight_init.py
+| |____fwd
+| | |____blocks.py
+| | |____decoder.py
+| | |____transformer.py
+| | |____normalization.py
+| | |____architectures.py
+| | |____configs.py
+|____README.md
+|____data
+| |____folder_dataset.py
+| |____util.py
+| |____mask_generator.py
+| |____dtu.py
+| |____shapenet.py
+| |____arkit.py
+| |____multi.py
+| |____gs.py
+| |____scannet.py
+| |____wildrgb.py
+|____.gitignore
+|____training.sh
+|____eval.py
+|____new.py
+|____directory_tree.txt
+|____training.py
+|____output

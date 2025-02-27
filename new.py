@@ -6,6 +6,7 @@ from torchvision.transforms.functional import pil_to_tensor
 
 import sys
 import torch
+from models.layers.upsampler import PixelShuffleUpsampler
 from utils.hubconf import radio_model
 
 
@@ -18,18 +19,22 @@ if __name__ == "__main__":
     model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version, progress=True)
     model.cuda().eval()
 
-    x = Image.open('dtu_down_4/DTU/Rectified/scan1/image/000007.png').convert('RGB')
+    x = Image.open('datasets/dtu_down_4/DTU/Rectified/scan1/image/000007.png').convert('RGB')
     x = pil_to_tensor(x).to(dtype=torch.float32, device='cuda')
     x.div_(255.0)  # RADIO expects the input values to be between 0 and 1
     x = x.unsqueeze(0) # Add a batch dimension
 
     nearest_res = model.get_nearest_supported_resolution(*x.shape[-2:])
-    x = F.interpolate(x, nearest_res, mode='bilinear', align_corners=False)
+    xs = F.interpolate(x, nearest_res, mode='bilinear', align_corners=False)
 
     # RADIO expects the input to have values between [0, 1]. It will automatically normalize them to have mean 0 std 1.
     # summary, spatial_features = model(x)
     model = radio_model(version='radio_v2.5-l').cuda()
     with torch.no_grad():
-        summary, spatial_features = model(x, feature_fmt='NCHW')
+        summary, spatial_features = model(xs, feature_fmt='NCHW')
     # x = torch.rand(1, 3, 224, 224, device='cuda')
+
+    up = PixelShuffleUpsampler(1024).cuda()
+    y = up(spatial_features, x.shape[-2:])
+    print(x.shape, y.shape)
     print(spatial_features.shape)

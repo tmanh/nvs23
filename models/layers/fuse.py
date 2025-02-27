@@ -1,9 +1,11 @@
 import torch.nn as nn
 
+from models.layers.adaptive_conv_cuda.adaptive_conv import AdaptiveConv
 from models.layers.gruunet import GRUUNet
 
 from models.layers.legacy_fuse import *
 from models.layers.minGRU.mingru import minGRU
+from models.layers.upsampler import PixelShuffleUpsampler
 from .osa_utils import *
 
 
@@ -64,30 +66,81 @@ class LocalFusion(nn.Module):
     def __init__(self, ) -> None:
         super().__init__()
 
-        self.shallow = SNetDS2BNBase8(3)
+        self.radius = 3
+        self.repeats = 3
+        self.diameter = self.radius * 2 + 1
+
+        self.shallow = SNetDS2BNBase8(5)
         self.gru = minGRU(16)
         self.gru_back = minGRU(16)
 
-        self.alpha = nn.Conv2d(16, 1, kernel_size=3, padding=1)
-        self.out = nn.Conv2d(16, 3, kernel_size=3, padding=1)
+        self.alpha = nn.Conv2d(16, 1, kernel_size=1, padding=0)
 
-    def forward(self, prj_colors):
-        B, V, C, H, W = prj_colors.shape
 
-        prj_colors = prj_colors.view(B * V, C, H, W)
-        fs = self.shallow(prj_colors)
+    def forward(self, prj_feats):
+        B, V, C, H, W = prj_feats.shape
 
+        # Step 1: extract features - 2D
+        prj_feats = prj_feats.view(B * V, C, H, W)
+        fs = self.shallow(prj_feats)
+
+        # Step 2: extract features along different points
         fs = fs.view(B, V, -1, H, W).permute(0, 3, 4, 1, 2)
         fs = self.gru(fs)
         fs = self.gru_back(torch.flip(fs, dims=[1]))
         fs = torch.flip(fs, dims=[1])
         fs = fs.view(B, H, W, V, -1).permute(0, 3, 4, 1, 2)
 
+        # Step 3: predict weights
         fs = fs.contiguous().view(B * V, -1, H, W)
-        out = self.out(fs).view(B, V, 3, H, W)
         alpha = self.alpha(fs).view(B, V, 1, H, W)
+        prj_feats = prj_feats.view(B, V, -1, H, W)
+        return torch.sum(prj_feats * torch.softmax(alpha, dim=1), dim=1)
 
-        return torch.sum(out * torch.softmax(alpha, dim=1), dim=1)
+
+class GlobalFusion(nn.Module):
+    def __init__(self, dim) -> None:
+        super().__init__()
+
+        self.merge = nn.Sequential(
+            nn.Conv2d(2 * dim, dim, kernel_size=1, padding=0),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim),
+            nn.GELU(),
+            nn.Conv2d(dim, dim, kernel_size=1, padding=0)
+        )
+
+        self.upsampler = PixelShuffleUpsampler(dim)
+
+        self.gru = minGRU(dim)
+        self.gru_back = minGRU(dim)
+
+        self.alpha = nn.Conv2d(dim, 1, kernel_size=3, padding=1)
+        self.out = nn.Conv2d(dim // 16, 3, kernel_size=3, padding=1)
+
+    def forward(self, feats, prj_feats, original_shape):
+        B, V, C, H, W = prj_feats.shape
+
+        feats = feats.view(B * V, C, H, W)
+        prj_feats = prj_feats.view(B * V, C, H, W)
+
+        feats = feats + self.merge(torch.cat([feats, prj_feats], dim=1))
+
+        feats = feats.view(B, V, -1, H, W).permute(0, 3, 4, 1, 2)
+        feats = self.gru(feats)
+        feats = self.gru_back(torch.flip(feats, dims=[1]))
+        feats = torch.flip(feats, dims=[1])
+        feats = feats.view(B, H, W, V, -1).permute(0, 3, 4, 1, 2)
+
+        feats = feats.contiguous().view(B * V, -1, H, W)
+        
+        alpha = self.alpha(feats).view(B, V, 1, H, W)
+
+        feats = torch.sum(feats.view(B, V, -1, H, W) * torch.softmax(alpha, dim=1), dim=1)
+        feats = self.upsampler(feats, original_shape)
+        out = self.out(feats)
+
+        return out
 
 
 class Fusion(nn.Module):

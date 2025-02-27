@@ -6,9 +6,6 @@ from pytorch3d.renderer import compositing
 from pytorch3d.renderer.points import rasterize_points
 
 
-# torch.manual_seed(42)
-
-
 class RasterizePointsXYsBlending(nn.Module):
     """
     Rasterizes a set of points using a differentiable renderer. Points are
@@ -84,7 +81,7 @@ class RasterizePointsXYsBlending(nn.Module):
         # self._num_points_per_cloud = self._P * torch.ones((self._N,), dtype=torch.int64, device=self.device)
         # Modified this in the pytorch code
         points_idx, z_buf, dist = rasterize_points(
-            pts3D, image_size, radius, self.points_per_pixel, bin_size=0
+            pts3D, image_size, radius, points_per_pixel=self.points_per_pixel, bin_size=0
         )
 
         dist = dist / pow(radius, self.opts.model.rad_pow)
@@ -95,8 +92,7 @@ class RasterizePointsXYsBlending(nn.Module):
         )
         z_buf = z_buf.permute(0, 3, 1, 2)
         alphas = alphas * (z_buf >= 0)
-        # if max_alpha:
-        #     alphas = (alphas == torch.max(alphas, dim=1)[0].unsqueeze(1)).float()
+
         if self.opts.model.accumulation == 'alphacomposite':
             transformed_src_alphas = compositing.alpha_composite(
                 points_idx.permute(0, 3, 1, 2).long(),
@@ -110,11 +106,29 @@ class RasterizePointsXYsBlending(nn.Module):
                 pts3D.features_packed().permute(1,0),
             )
         elif self.opts.model.accumulation == 'wsumnorm':
+
             transformed_src_alphas = compositing.norm_weighted_sum(
                 points_idx.permute(0, 3, 1, 2).long(),
                 alphas,
                 pts3D.features_packed().permute(1,0),
             )
+        elif self.opts.model.accumulation == 'list':
+            # Assume points_idx is of shape (B, H, W, K)
+            # Permute to (B, K, H, W) for consistency
+            indices = points_idx.permute(0, 3, 1, 2).long()  # shape: (B, K, H, W)
+            
+            # Get features from pts3D, permute to shape (N, C)
+            features = pts3D.features_packed()  # shape: (N, C)
+
+            # Use advanced indexing to gather features:
+            # This returns a tensor of shape (B, K, C, H, W)
+            transformed_src_alphas = features[indices].permute(0, 1, 4, 2, 3)
+
+            w_normed = alphas * (points_idx.permute(0,3,1,2) >= 0).float()
+            # w_normed = w_normed / w_normed.sum(dim=1, keepdim=True).clamp(min=1e-9)
+            
+            return transformed_src_alphas, z_buf.unsqueeze(2), w_normed.unsqueeze(2)
+
         if depth is False:
             return transformed_src_alphas
 

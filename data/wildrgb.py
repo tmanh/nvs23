@@ -107,7 +107,6 @@ class WildRGBDataset(torch.utils.data.Dataset):
         Rt = X['camera_pose']
         
         return Ks, Rt
-        
 
     def get_path_from(self, scan_index):
         root_dir = os.path.join(self.all_scenes[scan_index])
@@ -115,18 +114,24 @@ class WildRGBDataset(torch.utils.data.Dataset):
         rgb_paths = [
             os.path.join(root_dir, 'rgb', d) for d in os.listdir(os.path.join(root_dir, 'rgb'))
         ]
-        
+        rgb_paths.sort()
+
         depth_paths = [
-            os.path.join(root_dir, 'depth', d) for d in os.listdir(os.path.join(root_dir, 'depth'))
+            d.replace('/rgb', '/depth').replace('jpg', 'png') for d in rgb_paths
         ]
 
         cam_paths = [
-            os.path.join(root_dir, 'metadata', d) for d in os.listdir(os.path.join(root_dir, 'metadata'))
+            d.replace('/rgb', '/metadata').replace('jpg', 'npz') for d in rgb_paths
         ]
 
-        rgb_paths.sort()
-        depth_paths.sort()
-        cam_paths.sort()
+        new_rgb_paths = []
+        new_dep_paths = []
+        new_cam_paths = []
+        for r, d, c in zip(rgb_paths, depth_paths, cam_paths):
+            if os.path.exists(r) and os.path.exists(d) and os.path.exists(c):
+                new_rgb_paths.append(r)
+                new_dep_paths.append(d)
+                new_cam_paths.append(c)
 
-        return rgb_paths, depth_paths, cam_paths
+        return new_rgb_paths, new_dep_paths, new_cam_paths
  

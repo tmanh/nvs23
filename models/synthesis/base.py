@@ -14,23 +14,7 @@ from models.losses.multi_view import *
 
 from models.projection.z_buffer_manipulator import Screen_PtsManipulator
 
-from models.synthesis.encoder import ColorFeats, WideResNetMultiScale
-
-# import kornia as K
-
-
-def fill_holes(images, depths):
-    kernel = torch.ones(3, 3, device=images.device)
-    N, V, _, H, W = images.shape
-    dilated_images = K.morphology.dilation(images.view(N * V, -1, H, W), kernel)
-    dilated_depths = K.morphology.dilation(depths.view(N * V, -1, H, W), kernel)
-
-    masks = (depths > 0).float()
-
-    inpainted_imags = images.view(N, V, -1, H, W) + (1 - masks) * dilated_images
-    inpainted_depths = depths.view(N, V, -1, H, W) + (1 - masks) * dilated_depths
-
-    return inpainted_imags, inpainted_depths
+from models.synthesis.encoder import ColorFeats
 
 
 def merge_reprojected_views(images, depths, bins=100):
@@ -78,9 +62,6 @@ def merge_reprojected_views(images, depths, bins=100):
     
     # Normalize weights
     weights = weights / (weights.sum(dim=1, keepdim=True) + 1e-8)
-
-    # masked_depths[masked_depths <= 0] = float('inf')
-    # weights = (masked_depths == torch.min(masked_depths, dim=1, keepdim=True)[0]).float()
     
     # Step 5: Perform weighted merge of images
     weighted_images = images * weights  # Broadcast weights to match image channels
@@ -90,6 +71,8 @@ def merge_reprojected_views(images, depths, bins=100):
 
 
 class BaseModule(nn.Module):
+    ########################## INIT ##########################
+
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
             trunc_normal_(m.weight, std=.02)
@@ -111,28 +94,6 @@ class BaseModule(nn.Module):
         self.init_hyper_params(opt)
         self.init_models()
         self.freeze()
-
-    def to_train(self):
-        self.train()
-        self.freeze()
-        return self
-
-    def to_eval(self):
-        self.eval()
-        self.freeze()
-        return self
-
-    @staticmethod
-    def allocated():
-        current = torch.cuda.memory_allocated(0)/1024/1024/1024
-        print(f'allocated: {current} GB')
-        return current
-
-    @staticmethod
-    def gain(previous):
-        current = torch.cuda.memory_allocated(0)/1024/1024/1024
-        print(f'allocated: {current} GB')
-        print(f'gain: {current - previous} GB')
 
     def init_hyper_params(self, opt):
         ##### LOAD PARAMETERS
@@ -158,19 +119,19 @@ class BaseModule(nn.Module):
         height = self.opt.model.H
 
         self.pts_transformer = Screen_PtsManipulator(W=width, H=height, opt=self.opt)
+        
+        opt = self.opt.copy()
+        opt.model.accumulation = 'list'
+        opt.model.pp_pixel = 8
+        self.list_pts_transformer = Screen_PtsManipulator(W=width, H=height, opt=opt)
 
     def init_decoder(self):
         pass
 
     def init_fusion_module(self):
         pass
-
-    def to_cuda(self, *args):
-        if torch.cuda.is_available():
-            new_args = [args[i].cuda() for i in range(len(args))]
-        return new_args
     
-    ##### FORWARD ###################################
+    ########################## FORWARD ##########################
 
     def compute_K(self, K, ori_shape, fs_shape):
         hc, wc = ori_shape
@@ -215,6 +176,8 @@ class BaseModule(nn.Module):
             mask = (torch.sum(prj_depths[0], dim=1) > 0).float().detach()
             return final, mask, prj_feats[0]  # self.out(merged_fs), warped
         return final
+    
+    ########################## RENDERING - SEPARATELY ##########################
 
     def rendering_all_views(
             self, src_feats, src_pts,
@@ -280,6 +243,96 @@ class BaseModule(nn.Module):
         )
 
         return prj_feats, prj_depths
+    
+    ########################## RENDERING - TOGETHER ##########################
+
+    def list_rendering_all_views(
+            self, src_feats, src_pts,
+            K, K_inv,
+            src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
+            H, W, radius, max_alpha
+        ):
+        prj_feats = []
+        prj_depths = []
+        prj_weights = []
+
+        _, V, _, _ = src_feats.shape
+        for i in range(V):
+            prj_fs, prj_ds, prj_ws = self.list_splatting(src_feats, src_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, H, W, radius, max_alpha, i)
+            
+            prj_depths.append(prj_ds)
+            prj_feats.append(prj_fs)
+            prj_weights.append(prj_ws)
+
+        prj_depths = torch.cat(prj_depths, dim=1)
+        prj_feats = torch.cat(prj_feats, dim=1)
+        prj_weights = torch.cat(prj_weights, dim=1)
+
+        return prj_feats, prj_depths, prj_weights
+
+    def list_splatting(self, src_feats, src_pts, K, K_inv, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, H, W, radius, max_alpha, i):
+        pts_3D_nv = self.pts_transformer.view_to_world_coord(
+            src_pts[:, i], K, K_inv, src_RTs[:, i], src_RTinvs[:, i], H, W
+        )
+
+        src_fs = src_feats[:, i:i + 1]
+        sampler = self.pts_transformer.world_to_view(
+            pts_3D_nv,
+            K,
+            K_inv,
+            dst_RTs.view(-1, 4, 4),
+            dst_RTinvs.view(-1, 4, 4),
+            H, W
+        )
+
+        pointcloud = sampler.permute(0, 2, 1).contiguous()
+        src_fs = src_fs.view(-1, *src_fs.shape[2:])
+
+        prj_fs, prj_ds, prj_weigths = self.list_pts_transformer.splatter(
+            pointcloud, src_fs, image_size=(H, W), depth=True, radius=radius, max_alpha=max_alpha
+        )
+        
+        return prj_fs, prj_ds, prj_weigths
+
+    # NOTE: this function get the list of projected points instead of the blended one
+    def list_warp_all_views(
+            self, feats, depths, ori_shape,
+            K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
+            radius=None, max_alpha=False, top_k=8,
+        ):
+        bs, nv, c, hf, wf = feats.shape
+        hc, wc = ori_shape
+
+        depths = F.interpolate(
+            depths.view(bs * nv, 1, hc, wc), size=(hf, wf), mode='nearest'
+        )
+
+        feats = feats.contiguous().view(bs, nv, c, -1)
+        depths = depths.contiguous().view(bs, nv, 1, -1)
+
+        prj_feats, prj_depths, prj_weights = self.list_rendering_all_views(
+            feats, depths,
+            K, torch.inverse(K),
+            src_RTs, src_RTinvs, dst_RTs, dst_RTinvs,
+            hf, wf,
+            radius, max_alpha
+        )
+
+        # Get top-k of the weights and their values
+        squeezed_prj_weights = prj_weights.squeeze(2)
+        prj_weights, topk_indices = torch.topk(squeezed_prj_weights, k=top_k, dim=1)
+        topk_indices = topk_indices.unsqueeze(2)
+        prj_weights = prj_weights.unsqueeze(2)
+
+        prj_depths = torch.gather(prj_depths, dim=1, index=topk_indices)
+        
+        # Expand the indices for the feat map and get the top-k
+        expanded_indices = topk_indices.expand(-1, -1, prj_feats.shape[2], -1, -1)
+        prj_feats = torch.gather(prj_feats, dim=1, index=expanded_indices)
+
+        return prj_feats, prj_depths, prj_weights
+
+    ########################## COMMON ##########################
 
     def freeze(self):
         self.encoder.freeze()
@@ -295,3 +348,30 @@ class BaseModule(nn.Module):
             lkinv = torch.inverse(lk)
         
         return lk, lkinv
+
+    def to_train(self):
+        self.train()
+        self.freeze()
+        return self
+
+    def to_eval(self):
+        self.eval()
+        self.freeze()
+        return self
+
+    @staticmethod
+    def allocated():
+        current = torch.cuda.memory_allocated(0)/1024/1024/1024
+        print(f'allocated: {current} GB')
+        return current
+
+    @staticmethod
+    def gain(previous):
+        current = torch.cuda.memory_allocated(0)/1024/1024/1024
+        print(f'allocated: {current} GB')
+        print(f'gain: {current - previous} GB')
+
+    def to_cuda(self, *args):
+        if torch.cuda.is_available():
+            new_args = [args[i].cuda() for i in range(len(args))]
+        return new_args

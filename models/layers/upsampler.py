@@ -98,5 +98,41 @@ class JBUStack(torch.nn.Module):
         return self.fixup_proj(source_16) * 0.1 + source_16
     
 
+class PixelShuffleUpsampler(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(dim, (dim // 2) * 4, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.PixelShuffle(2),
+        )
+        self.conv2 = nn.Sequential(
+            nn.Conv2d((dim // 2), (dim // 4) * 4, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.PixelShuffle(2),
+        )
+        self.conv3 = nn.Sequential(
+            nn.Conv2d((dim // 4), (dim // 8) * 4, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.PixelShuffle(2),
+        )
+        self.conv4 = nn.Sequential(
+            nn.Conv2d((dim // 8), (dim // 16) * 4, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.PixelShuffle(2),
+        )
+
+        self.fixup_proj = torch.nn.Sequential(
+            torch.nn.Dropout2d(0.2),
+            torch.nn.Conv2d((dim // 16), (dim // 16), kernel_size=1)
+        )
+
+    def forward(self, x, original_shape):
+        out = self.conv4(self.conv3(self.conv2(self.conv1(x))))
+        out = F.interpolate(out, size=original_shape, mode='bilinear', align_corners=False)
+        return self.fixup_proj(out) * 0.1 + out
+
+
 if __name__ == "__main__":
     model = JBUStack(feat_dim=64)

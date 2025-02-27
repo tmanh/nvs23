@@ -19,7 +19,7 @@ class LocalGRU(BaseModule):
     def extract_src_feats(self, colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs):
         ori_shape = colors.shape[-2:]
 
-        prj_fs, prj_pts = self.warp_all_views(
+        prj_colors, prj_depths, prj_weights = self.list_warp_all_views(
             colors, depths, ori_shape,
             self.compute_K(K, ori_shape, colors.shape[-2:]),
             src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
@@ -27,16 +27,21 @@ class LocalGRU(BaseModule):
             max_alpha=False
         )
 
-        return prj_fs, prj_pts
+        return prj_colors, prj_depths, prj_weights
 
     def forward(self, depths, colors, K, src_RTs, src_RTinvs, dst_RTs, dst_RTinvs, visualize=False):
-        prj_feats, prj_depths = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
+        with torch.no_grad():
+            prj_colors, prj_depths, prj_weights = self.extract_src_feats(colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs)
+            prj_fs = torch.cat([prj_colors, prj_depths, prj_weights], dim=2)
 
-        final = self.merge_net(prj_feats)
+        final = self.merge_net(prj_fs)[:, :3]
+        mask = (torch.sum(prj_weights, dim=1) > 0).float().detach()
+
+        final = final * mask
 
         if visualize:
-            mask = (torch.sum(prj_depths, dim=1) > 0).float().detach()
-            return final, mask, prj_feats  # self.out(merged_fs), warped
+            return final, mask, prj_colors  # self.out(merged_fs), warped
+        
         return final
     
     def freeze(self):
