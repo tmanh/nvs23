@@ -46,3 +46,10 @@ python setup.py install
 |____eval.py                            # Simple testing code, not evaluation yet
 |____training.py                        # All training things happen here
 ```
+
+## TODO
+
+- Optimizing pose + depth
+[ ] Check the posibility of Met3r
+[ ] Check the posibility of SDSLoss
+[ ] Check the posibility

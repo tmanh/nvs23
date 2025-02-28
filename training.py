@@ -123,13 +123,16 @@ def main(args) -> None:
             dst_Rts = dst_Rts.float().to(device)
             src_Rts = src_Rts.float().to(device)
 
-            pred, mask, warp = renderer(
+            outputs = renderer(
                 src_ds, src_cs,
                 K,
                 src_Rts, torch.inverse(src_Rts), 
                 dst_Rts, torch.inverse(dst_Rts),
                 visualize=True
             )
+            pred, mask, warp = outputs[0], outputs[1], outputs[2]
+            if len(outputs) == 4:
+                re_src_cs = outputs[3]
             dst_cs = dst_cs.squeeze(1)
 
             if global_step % 250 == 0: # Visualize each X steps
@@ -155,6 +158,13 @@ def main(args) -> None:
                     out = src_cs[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
                     cv2.imwrite(f'output/c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
 
+                if len(outputs) == 4:
+                    re_src_cs = re_src_cs * 255
+                    re_src_cs = re_src_cs.clamp(0, 255.0)
+                    for k in range(src_cs.shape[1]):
+                        out = re_src_cs[k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+                        cv2.imwrite(f'output/re_c_src{k}.png', cv2.cvtColor(out, cv2.COLOR_RGB2BGR))
+
             # The mask point out invalid pixels
             # So, we dilated the mask a bit so, the network can learn to
             # fill in small gaps    
@@ -162,6 +172,8 @@ def main(args) -> None:
             mask = kornia.morphology.closing(mask, kernel).detach()
 
             loss_l1 = F.l1_loss(pred * mask, dst_cs * mask)
+            if len(outputs) == 4:
+                loss_l1 += F.l1_loss(re_src_cs, src_cs.view(re_src_cs.shape))
             loss_p = 0.05 * ploss(pred * mask, dst_cs * mask)
             loss = loss_l1 + loss_p
 

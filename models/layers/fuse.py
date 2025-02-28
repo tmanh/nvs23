@@ -1,12 +1,81 @@
 import torch.nn as nn
 
 from models.layers.adaptive_conv_cuda.adaptive_conv import AdaptiveConv
+from models.layers.cat import ViewCrossAttention
 from models.layers.gruunet import GRUUNet
 
 from models.layers.legacy_fuse import *
 from models.layers.minGRU.mingru import minGRU
 from models.layers.upsampler import PixelShuffleUpsampler
 from .osa_utils import *
+
+import random
+
+
+def create_irregular_mask(shape, device, threshold=0.5, smooth=True, kernel_size=5):
+    """
+    Creates a binary mask with irregular (blob-like) shapes.
+    
+    Args:
+        shape (tuple): Shape of the tensor, e.g., (N, C, H, W)
+        threshold (float): Threshold value to binarize the mask.
+        smooth (bool): Whether to smooth the random tensor to get irregular shapes.
+        kernel_size (int): Size of the smoothing kernel.
+    
+    Returns:
+        mask (torch.Tensor): A binary mask of the given shape.
+    """
+    # Step 1: Generate an initial random tensor with values in [0,1)
+    rand_tensor = torch.rand(shape, device=device)
+    
+    # Optionally smooth the random tensor to create smoother, irregular blobs.
+    if smooth:
+        # Create a simple mean filter kernel
+        kernel = torch.ones((1, 1, kernel_size, kernel_size), device=device) / (kernel_size ** 2)
+        padding = kernel_size // 2
+        
+        # Reshape to combine batch and channel dimensions for group convolution
+        N, C, H, W = rand_tensor.shape
+        rand_tensor_reshaped = rand_tensor.view(N * C, 1, H, W)
+        
+        # Apply the convolution (smoothing)
+        smoothed = F.conv2d(rand_tensor_reshaped, kernel, padding=padding)
+        smoothed = smoothed.view(N, C, H, W)
+    else:
+        smoothed = rand_tensor
+    
+    # Create a binary mask using the threshold.
+    mask = (smoothed > threshold).float()
+    return mask
+
+
+def random_noise_function(shape, device, max_value, mask_threshold=0.5, smooth_mask=True, kernel_size=5):
+    """
+    Generates a final noise tensor by combining an irregular mask and a noise map.
+    
+    Args:
+        shape (tuple): Shape of the tensors (e.g., (N, C, H, W)).
+        mask_threshold (float): Threshold for binarizing the mask.
+        smooth_mask (bool): Whether to apply smoothing to the random mask.
+        kernel_size (int): Kernel size used for smoothing the mask.
+    
+    Returns:
+        final_noise (torch.Tensor): The resulting noise tensor.
+        mask (torch.Tensor): The binary mask used.
+        noise_map (torch.Tensor): The raw noise map sampled from a normal distribution.
+    """
+    with torch.no_grad():
+        # Step 1: Create an irregular random mask.
+        mask = create_irregular_mask(shape, device, threshold=mask_threshold, smooth=smooth_mask, kernel_size=kernel_size)
+        
+        # Step 2: Create a random noise map (e.g., diffusion model noise)
+        noise_map = torch.randn(shape, device=device) * random.uniform(0.0, max_value) 
+        
+        # Step 3: Compute the final noise tensor using the mask.
+        # Here, the noise is applied only where mask == 1.
+        final_noise = mask * noise_map
+    
+    return final_noise, mask, noise_map
 
 
 class SNetDS2BNBase8(nn.Module):
@@ -62,15 +131,16 @@ class SNetDS2BNBase8(nn.Module):
 
         return out
 
+
 class LocalFusion(nn.Module):
-    def __init__(self, ) -> None:
+    def __init__(self, input=5) -> None:
         super().__init__()
 
         self.radius = 3
         self.repeats = 3
         self.diameter = self.radius * 2 + 1
 
-        self.shallow = SNetDS2BNBase8(5)
+        self.shallow = SNetDS2BNBase8(input)
         self.gru = minGRU(16)
         self.gru_back = minGRU(16)
 
@@ -99,46 +169,104 @@ class LocalFusion(nn.Module):
 
 
 class GlobalFusion(nn.Module):
-    def __init__(self, dim) -> None:
+    def __init__(self) -> None:
         super().__init__()
 
-        self.merge = nn.Sequential(
-            nn.Conv2d(2 * dim, dim, kernel_size=1, padding=0),
-            nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=3, stride=1, padding=1, groups=dim),
-            nn.GELU(),
-            nn.Conv2d(dim, dim, kernel_size=1, padding=0)
+        self.fuses = nn.ModuleList(
+            [
+                ViewCrossAttention(96),
+                ViewCrossAttention(192),
+                ViewCrossAttention(384),
+                ViewCrossAttention(768)
+            ]
         )
 
-        self.upsampler = PixelShuffleUpsampler(dim)
+        self.ups = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(768, 768, kernel_size=3, stride=1, padding=1),
+                    nn.GELU(),
+                    nn.Conv2d(768, 384 * 4, kernel_size=1, stride=1, padding=0),
+                    nn.PixelShuffle(2),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(384, 384, kernel_size=3, stride=1, padding=1),
+                    nn.GELU(),
+                    nn.Conv2d(384, 192 * 4, kernel_size=1, stride=1, padding=0),
+                    nn.PixelShuffle(2),
+                ),
+                nn.Sequential(
+                    nn.Conv2d(192, 192, kernel_size=3, stride=1, padding=1),
+                    nn.GELU(),
+                    nn.Conv2d(192, 96 * 4, kernel_size=1, stride=1, padding=0),
+                    nn.PixelShuffle(2),
+                ),
+                PixelShuffleUpsampler(96)
+            ]
+        )
 
-        self.gru = minGRU(dim)
-        self.gru_back = minGRU(dim)
+        self.sr = nn.Sequential(
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.Conv2d(96, 64 * 4, kernel_size=1, stride=1, padding=0),
+            nn.PixelShuffle(2),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.GELU(),
+            nn.Conv2d(64, 32 * 4, kernel_size=1, stride=1, padding=0),
+            nn.PixelShuffle(2),
+        )
 
-        self.alpha = nn.Conv2d(dim, 1, kernel_size=3, padding=1)
-        self.out = nn.Conv2d(dim // 16, 3, kernel_size=3, padding=1)
+        self.out = nn.Conv2d(32, 3, kernel_size=3, padding=1)
+        self.merge_shallow = nn.Conv2d(48, 32, kernel_size=3, padding=1)
 
-    def forward(self, feats, prj_feats, original_shape):
-        B, V, C, H, W = prj_feats.shape
+    def forward_diff(self, shallow, feats, original_shape):
+        final_noise, _, _ = random_noise_function(shallow.shape, shallow.device, max_value=0.1, kernel_size=13, mask_threshold=0.4)
+        shallow = shallow + final_noise
 
-        feats = feats.view(B * V, C, H, W)
-        prj_feats = prj_feats.view(B * V, C, H, W)
+        final_noise, _, _ = random_noise_function(feats[3].shape, feats[3].device, max_value=0.1, kernel_size=9)
+        up = feats[3] + final_noise
 
-        feats = feats + self.merge(torch.cat([feats, prj_feats], dim=1))
+        up = feats[2] + self.ups[0](up)[:, :, :feats[2].shape[-2], :feats[2].shape[-1]]
+        final_noise, _, _ = random_noise_function(up.shape, up.device, max_value=0.1, kernel_size=5)
+        up = up + final_noise
 
-        feats = feats.view(B, V, -1, H, W).permute(0, 3, 4, 1, 2)
-        feats = self.gru(feats)
-        feats = self.gru_back(torch.flip(feats, dims=[1]))
-        feats = torch.flip(feats, dims=[1])
-        feats = feats.view(B, H, W, V, -1).permute(0, 3, 4, 1, 2)
+        up = feats[1] + self.ups[1](up)[:, :, :feats[1].shape[-2], :feats[1].shape[-1]]
+        final_noise, _, _ = random_noise_function(up.shape, up.device, max_value=0.1, kernel_size=3, mask_threshold=0.75)
+        up = up + final_noise
 
-        feats = feats.contiguous().view(B * V, -1, H, W)
+        up = feats[0] + self.ups[2](up)[:, :, :feats[0].shape[-2], :feats[0].shape[-1]]
+
+        up = self.sr(up)
+
+        if up.shape[-2:] != original_shape:
+            up = F.interpolate(up, size=original_shape, mode='nearest')
+    
+        up = up + self.merge_shallow(torch.cat([up, shallow], dim=1))
+
+        return self.out(up)
         
-        alpha = self.alpha(feats).view(B, V, 1, H, W)
 
-        feats = torch.sum(feats.view(B, V, -1, H, W) * torch.softmax(alpha, dim=1), dim=1)
-        feats = self.upsampler(feats, original_shape)
-        out = self.out(feats)
+    def forward(self, shallow, feats, prj_feats, original_shape):
+        new_fs = []
+        for i in range(len(feats)):
+            B, V, C, H, W = prj_feats[i].shape
+            fs = feats[i].unsqueeze(1).permute(0, 3, 4, 1, 2).view(B * H * W, 1, C)
+            pfs = prj_feats[i].permute(0, 3, 4, 1, 2).reshape(B * H * W, V, C)
+            fs = (fs + self.fuses[i](fs, pfs, pfs)).view(B, H, W, C).permute(0, 3, 1, 2)
+            new_fs.append(fs)
+
+        up = self.ups[0](new_fs[3])[:, :, :new_fs[2].shape[-2], :new_fs[2].shape[-1]]
+        print(up.shape, new_fs[2].shape)
+        up = new_fs[2] + up
+        up = new_fs[1] + self.ups[1](up)[:, :, :new_fs[1].shape[-2], :new_fs[1].shape[-1]]
+        up = new_fs[0] + self.ups[2](up)[:, :, :new_fs[0].shape[-2], :new_fs[0].shape[-1]]
+        up = self.sr(up)
+
+        if up.shape[-2:] != original_shape:
+            up = F.interpolate(up, size=original_shape, mode='nearest')
+
+        up = up + self.merge_shallow(torch.cat([up, shallow], dim=1))
+        out = self.out(up)
 
         return out
 

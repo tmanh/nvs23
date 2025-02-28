@@ -152,10 +152,10 @@ def main(args):
     # sd = torch.load('weights/fwd.pt', weights_only=False)
     # model = DeepBlendingPlus(cfg).to(device)
     # sd = torch.load('weights/deepblend.pt', weights_only=False)
-    model = LocalGRU(cfg).to(device)
-    sd = torch.load('weights/local.pt', weights_only=False)
-    # model = GlobalGRU(cfg).to(device)
-    # sd = torch.load('weights/global.pt', weights_only=False)
+    # model = LocalGRU(cfg).to(device)
+    # sd = torch.load('weights/local.pt', weights_only=False)
+    model = GlobalGRU(cfg).to(device)
+    sd = torch.load('weights/global2.pt', weights_only=False)
     model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():
@@ -188,12 +188,11 @@ def main(args):
     gt = (gt * 255.0).clamp(0, 255.0)
     gt = gt[0].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite('output/gt.png', gt)
-    
-    # warped, merged = warped
-    # lw = (warped * 255.0).clamp(0, 255.0)
-    # for k in range(lw.shape[1]):
-    #     out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
-    #     cv2.imwrite(f'output/out_{k}.png', out)
+
+    lw = (warped * 255.0).clamp(0, 255.0)
+    for k in range(lw.shape[1]):
+        out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+        cv2.imwrite(f'output/out_{k}.png', out)
     
 
 if __name__ == "__main__":

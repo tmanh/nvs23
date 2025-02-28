@@ -90,7 +90,6 @@ class BaseModule(nn.Module):
 
     def __init__(self, opt):
         super().__init__()
-
         self.init_hyper_params(opt)
         self.init_models()
         self.freeze()

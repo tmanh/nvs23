@@ -14,7 +14,7 @@ class ArkitDataset(torch.utils.data.Dataset):
     def __init__(self, file_list, val=None):
         super().__init__()
         self.file_list = file_list
-        self.n_samples = 3
+        self.n_samples = 4
         self.image_to_tensor = get_image_to_tensor_balanced()
 
         self.scale_factor = 100

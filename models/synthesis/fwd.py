@@ -52,7 +52,7 @@ class FWD(BaseModule):
             self.compute_K(K, ori_shape, fs.shape[-2:]),
             src_RTinvs, src_RTs, dst_RTinvs, dst_RTs,
             radius=self.opt.model.radius,
-            max_alpha=self.opt.model.fradius # False if i == 0 else self.opt.model.fradius
+            max_alpha=False
         )
 
         B, V, C, H, W = prj_fs.shape

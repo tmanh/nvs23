@@ -13,7 +13,7 @@ class WildRGBDataset(torch.utils.data.Dataset):
     def __init__(self, file_list, val=None):
         super().__init__()
         self.file_list = file_list
-        self.n_samples = 3
+        self.n_samples = 4
         self.image_to_tensor = get_image_to_tensor_balanced()
 
         self.scale_factor = 100
@@ -36,7 +36,7 @@ class WildRGBDataset(torch.utils.data.Dataset):
             rgb_paths, depth_paths, cam_paths = self.get_path_from(index)
 
             tgt_idx = np.random.randint(0, len(rgb_paths))
-            src_idx = random.sample(list(np.arange(-10, 11, 1)), k=self.n_samples - 1)
+            src_idx = random.sample(list(np.arange(-6, 7, 1)), k=self.n_samples - 1)
             sel_indices = [tgt_idx, *src_idx]
 
             rgb_paths = [rgb_paths[i] for i in sel_indices]

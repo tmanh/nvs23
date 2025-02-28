@@ -14,7 +14,7 @@ class DTU_Dataset(torch.utils.data.Dataset):
         super().__init__()
         path = file_list
         self.file_list = file_list
-        self.n_samples = 3
+        self.n_samples = 4
         self.base_path = os.path.join(path, 'DTU/Rectified')
         self.image_to_tensor = get_image_to_tensor_balanced()
 
