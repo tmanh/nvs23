@@ -3,7 +3,7 @@ import torch
 from models.layers.fuse import GlobalFusion, SNetDS2BNBase8
 from models.synthesis.base import BaseModule
 from models.synthesis.encoder import MultiScaleSwin
-from models.synthesis.local_syn import LocalGRU
+from models.synthesis.local_syn import LocalGRU, LocalSimGRU
 
 
 class GlobalGRU(BaseModule):
@@ -12,8 +12,8 @@ class GlobalGRU(BaseModule):
         self.encoder = MultiScaleSwin()
 
     def init_fusion_module(self):
-        self.local = LocalGRU(self.opt)
-        sd = torch.load('weights/local.pt', weights_only=False)
+        self.local = LocalSimGRU(self.opt)
+        sd = torch.load('weights/local_sim.pt', weights_only=False)
         self.local.load_state_dict(sd)
 
         self.merge_net = GlobalFusion()

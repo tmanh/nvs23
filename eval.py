@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from data.util import load_pfm
 from models.synthesis.fwd import FWD
 from models.synthesis.deepblendplus import DeepBlendingPlus
-from models.synthesis.local_syn import LocalGRU
+from models.synthesis.local_syn import LocalGRU, LocalSimGRU
 from models.synthesis.global_syn import GlobalGRU
 
 
@@ -156,6 +156,8 @@ def main(args):
     # sd = torch.load('weights/local.pt', weights_only=False)
     model = GlobalGRU(cfg).to(device)
     sd = torch.load('weights/global2.pt', weights_only=False)
+    # model = LocalSimGRU(cfg).to(device)
+    # sd = torch.load('weights/local_sim.pt', weights_only=False)
     model.load_state_dict(sd)
     model.eval()
     with torch.no_grad():

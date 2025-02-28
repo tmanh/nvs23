@@ -36,7 +36,7 @@ class WildRGBDataset(torch.utils.data.Dataset):
             rgb_paths, depth_paths, cam_paths = self.get_path_from(index)
 
             tgt_idx = np.random.randint(0, len(rgb_paths))
-            src_idx = random.sample(list(np.arange(-6, 7, 1)), k=self.n_samples - 1)
+            src_idx = random.sample(list(np.arange(max(0, tgt_idx - 10), min(tgt_idx + 11, len(rgb_paths) - 1), 1)), k=self.n_samples - 1)
             sel_indices = [tgt_idx, *src_idx]
 
             rgb_paths = [rgb_paths[i] for i in sel_indices]

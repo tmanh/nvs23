@@ -26,7 +26,7 @@ from models.synthesis.fwd import FWD
 from models.synthesis.global_syn import GlobalGRU
 from models.synthesis.deepblendplus import DeepBlendingPlus
 
-from models.synthesis.local_syn import LocalGRU
+from models.synthesis.local_syn import LocalGRU, LocalSimGRU
 from utils.common import instantiate_from_config, get_obj_from_str
 
 
@@ -52,7 +52,8 @@ def main(args) -> None:
     # renderer = LocalGRU(cfg)
     # renderer = FWD(cfg)
     # renderer = DeepBlendingPlus(cfg)
-    renderer = GlobalGRU(cfg)
+    # renderer = GlobalGRU(cfg)
+    renderer = LocalSimGRU(cfg)
 
     # Load the checkpoint if needed
     if cfg.train.resume and os.path.exists(cfg.train.resume):

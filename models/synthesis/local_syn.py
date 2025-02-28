@@ -56,7 +56,7 @@ class LocalSimGRU(BaseModule):
         pass
 
     def init_fusion_module(self):
-        self.merge_net = LocalFusion(input=4)
+        self.merge_net = LocalFusion(in_dim=4)
 
     def extract_src_feats(self, colors, depths, K, src_RTinvs, src_RTs, dst_RTinvs, dst_RTs):
         ori_shape = colors.shape[-2:]

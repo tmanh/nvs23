@@ -133,14 +133,14 @@ class SNetDS2BNBase8(nn.Module):
 
 
 class LocalFusion(nn.Module):
-    def __init__(self, input=5) -> None:
+    def __init__(self, in_dim=5) -> None:
         super().__init__()
 
         self.radius = 3
         self.repeats = 3
         self.diameter = self.radius * 2 + 1
 
-        self.shallow = SNetDS2BNBase8(input)
+        self.shallow = SNetDS2BNBase8(in_dim)
         self.gru = minGRU(16)
         self.gru_back = minGRU(16)
 
