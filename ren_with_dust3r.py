@@ -13,6 +13,7 @@ from models.synthesis.fwd import FWD
 from models.synthesis.deepblendplus import DeepBlendingPlus
 from models.synthesis.local_syn import LocalGRU, LocalSimGRU
 from models.synthesis.global_syn import GlobalGRU
+from utils.dust3r_wrapper import load_model, run_dust3r
 
 
 def peak_signal_noise_ratio_mask(image_true, image_test, mask, data_range=None):
@@ -75,111 +76,23 @@ def main(args):
     if torch.cuda.is_available():
         torch.backends.cudnn.enabled = True
 
-    path = 'datasets/dtu_down_4/DTU/Rectified/scan21/image'
-    dpath = 'datasets/dtu_down_4/Depths_2/scan21'
-    im_names = ['000029.png', '000022.png', '000025.png', '000028.png']  # , '000028.png'
-    indices = [29, 22, 25, 28]
+    src_colors, dst_colors, src_depths, dst_depths, K, src_RTs, dst_RTs = load_data()
 
-    camera = np.load('datasets/dtu_down_4/camera.npy', allow_pickle=True)
+    B, V, C, H, W = src_colors.shape
 
-    acolors = []
-    adepths = []
-    aK = []
-    aRTs = []
-    scale = 1000
-    for i, idx in zip(im_names, indices):
-        img = cv2.imread(os.path.join(path, i))
-        img = torch.tensor(img) / 255.0# * 2 - 1
-        img = img.permute(2, 0, 1).unsqueeze(0)
-
-        dep, _ = load_pfm(os.path.join(dpath, i.replace('0000', '000000').replace('png', 'pfm')))
-        dep = torch.tensor(dep.copy()) / scale
-        dep = dep.unsqueeze(0).unsqueeze(0)
-        dep = F.interpolate(dep, size=(300, 400), mode='nearest')
-
-        Rt, k = camera[idx]
-        Rt[:3, 3] = Rt[:3, 3] / scale
-        K = np.eye(4, 4)
-        K[:3, :3] = k
-        aK.append(
-            torch.tensor(K).unsqueeze(0)
-        )
-        aRTs.append(
-            torch.inverse(torch.tensor(Rt).unsqueeze(0))
-        )
-        acolors.append(img)
-        adepths.append(dep)
-
-    acolors = torch.stack(acolors, dim=1).float().cuda()
-    adepths = torch.stack(adepths, dim=1).float().cuda()
-    aK = torch.stack(aK, dim=1).float().cuda()
-    aRTs = torch.stack(aRTs, dim=1).float().cuda()
-
-    H, W = 300, 400
-
-    dst_RTs = aRTs[:, 0, :, :]
-    dst_RTs = dst_RTs.view(1, 1, 4, 4)
-
-    aRTs_inv = torch.inverse(aRTs)
+    src_RTinvs = torch.inverse(src_RTs)
     dst_RTinvs = torch.inverse(dst_RTs)
 
-    K = aK[:, 0]
-    depths = adepths[:, 1:]
-    colors = acolors[:, 1:]
-    src_RTs = aRTs[:, 1:]
-    src_RTinvs = aRTs_inv[:, 1:]
-
-    N, V, _, oH, oW = colors.shape
-    colors = F.interpolate(
-        colors.view(N * V, 3, oH, oW),
-        size=(H, W),
-        mode='bilinear',
-        align_corners=True,
-        antialias=True
-    ).view(N, V, 3, H, W)
-    depths = F.interpolate(
-        depths.view(N * V, 1, oH, oW),
-        size=(H, W),
-        mode='nearest'
-    ).view(N, V, 1, H, W)
-
-    K[:, 0] = W / oW * K[:, 0]
-    K[:, 1] = H / oH * K[:, 1]
-    
     ## "/home/antruong/anaconda3/envs/render/lib/python3.10/site-packages/torch/nn/modules/module.py", line 2215
     cfg = OmegaConf.load('configs/train.yaml')
-    # model = FWD(cfg).to(device)
-    # sd = torch.load('weights/fwd.pt', weights_only=False)
-    # model = DeepBlendingPlus(cfg).to(device)
-    # sd = torch.load('weights/deepblend.pt', weights_only=False)
-    # model = LocalGRU(cfg).to(device)
-    # sd = torch.load('weights/local.pt', weights_only=False)
-    # model = GlobalGRU(cfg).to(device)
-    # sd = torch.load('weights/global2.pt', weights_only=False)
     model = LocalSimGRU(cfg).to(device)
     sd = torch.load('weights/local_sim.pt', weights_only=False)
     model.load_state_dict(sd)
     model.eval()
-    print(
-        depths.shape,
-        colors.shape,
-        K.shape,
-            
-        src_RTs.shape,
-        src_RTinvs.shape,
-            
-        dst_RTs.shape, 
-        dst_RTinvs.shape,
-    )
-    print(
-        colors.min(), colors.max(),
-        depths.min(), depths.max()
-    )
-    exit()
     with torch.no_grad():
         out, _, warped = model(
-            depths,
-            colors,
+            src_depths,
+            src_colors,
             K,
             
             src_RTs,
@@ -204,13 +117,8 @@ def main(args):
     #     visualize=True,
     # )
 
-    gt = F.interpolate(
-        acolors[:, 0].view(1, 3, oH, oW),
-        size=(H, W),
-        mode='bilinear',
-        align_corners=True,
-        antialias=True
-    ).view(N, 3, H, W)
+    out = out.view(1, 3, H, W)
+    gt = dst_colors.view(1, 3, H, W)
     
     os.makedirs('output', exist_ok=True)
     out = (out * 255.0).clamp(0, 255.0)
@@ -225,6 +133,35 @@ def main(args):
     for k in range(lw.shape[1]):
         out = lw[0, k].permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
         cv2.imwrite(f'output/out_{k}.png', out)
+
+
+def scan_images(path):
+    return [
+        os.path.join(path, f) for f in os.listdir(path) if f.endswith(('.jpg', '.jpeg', '.png', '.JPG'))
+    ]
+
+
+def load_data(
+        path='datasets/dtu_down_4/DTU/Rectified/scan21/image'
+):
+    indices = [29, 22, 25, 28]
+
+    images = scan_images(path)
+    images = [images[i] for i in indices]
+
+    model = load_model()
+    imgs, dpts, ks, rts = run_dust3r(images, model)
+
+    src_colors = torch.tensor(imgs[1:]).permute((0, 3, 1, 2)).unsqueeze(0).float().cuda()
+    dst_colors = torch.tensor(imgs[:1]).permute((0, 3, 1, 2)).unsqueeze(0).float().cuda()
+    src_depths = torch.tensor(dpts[1:]).unsqueeze(1).unsqueeze(0).float().cuda()
+    dst_depths = torch.tensor(dpts[:1]).unsqueeze(1).unsqueeze(0).float().cuda()
+
+    K = torch.tensor(ks[0]).unsqueeze(0).float().cuda()
+    src_RTs = torch.tensor(rts[1:]).unsqueeze(0).float().cuda()
+    dst_RTs = torch.tensor(rts[:1]).unsqueeze(0).float().cuda()
+
+    return src_colors, dst_colors, src_depths, dst_depths, K, src_RTs, dst_RTs
     
 
 if __name__ == "__main__":

@@ -107,7 +107,7 @@ def _convert_scene_output_to_glb(outdir, imgs, pts3d, mask, focals, cams2world, 
         pct.export(file_obj=outfile, file_type='ply', encoding='binary_little_endian')
     else:
         scene.export(file_obj=outfile, file_type='ply')
-    exit()
+
     return outfile
 
 

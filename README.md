@@ -10,7 +10,6 @@
 ### Dependencies
 
 ```
-
 # Init the environment
 conda env create -f environment.yml
 
@@ -19,6 +18,17 @@ pip install "git+https://github.com/facebookresearch/pytorch3d.git"
 
 # Install Adaptive Conv
 cd models/layers/adaptive_conv_cuda
+python setup.py install
+
+# MVDream (Optional)
+pip install git+https://github.com/bytedance/MVDream
+
+pip install diffusers
+pip install open-clip-torch==2.24.0
+pip install gradio
+pip install plyfile
+
+cd models/losses/liegroups
 python setup.py install
 ```
 
